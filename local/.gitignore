@@ -1,0 +1,6 @@
+include
+lib
+src
+share
+lib64
+pip-selfcheck.json

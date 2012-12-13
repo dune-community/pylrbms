@@ -1,0 +1,5 @@
+PATH.sh
+build*
+.ipynb_checkpoints
+local*
+
