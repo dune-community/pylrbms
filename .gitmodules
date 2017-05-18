@@ -18,10 +18,6 @@
 	path = local/bin
 	url = https://github.com/dune-community/local-bin.git
         ignore = untracked
-[submodule "dune-localfunctions"]
-	path = dune-localfunctions
-	url = http://gitlab.dune-project.org/core/dune-localfunctions.git
-        ignore = dirty
 [submodule "dune-gdt"]
 	path = dune-gdt
 	url = https://github.com/dune-community/dune-gdt.git
