@@ -54,3 +54,15 @@
 [submodule "pymor"]
 	path = pymor
 	url = http://dune-project.uni-muenster.de/repos/projects/pymor.git
+[submodule "dune-localfunctions"]
+	path = dune-localfunctions
+	url = http://gitlab.dune-project.org/core/dune-localfunctions.git
+[submodule "dune-pdelab"]
+	path = dune-pdelab
+	url = https://gitlab.dune-project.org/pdelab/dune-pdelab.git
+[submodule "dune-typetree"]
+	path = dune-typetree
+	url = http://gitlab.dune-project.org/staging/dune-typetree.git
+[submodule "dune-functions"]
+	path = dune-functions
+	url = https://gitlab.dune-project.org/staging/dune-functions.git
