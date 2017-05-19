@@ -7,10 +7,16 @@ from pymor.discretizations.basic import StationaryDiscretization
 class DuneDiscretization(StationaryDiscretization):
 
     def _solve(self, mu):
-        return self.operators['global_op'].apply_inverse(self.operators['global_rhs'].as_vector())
+        return self.solution_space.from_data(
+            self.operators['global_op'].apply_inverse(self.operators['global_rhs'].as_vector()).data
+        )
 
     def as_generic_type(self):
         return StationaryDiscretization(self.operator, self.rhs)
+
+    def visualize(self, U, *args, **kwargs):
+        U = self.operators['global_op'].source.from_data(U.data)
+        self.visualizer.visualize(U, self, *args, **kwargs)
 
 
 def discretize():
@@ -141,10 +147,14 @@ def discretize():
     for ii in range(grid.num_subdomains):
         for jj in range(grid.num_subdomains):
             if ii == jj:
-                ops[ii, jj] = o = DuneXTMatrixOperator(local_matrices[ii])
+                ops[ii, jj] = o = DuneXTMatrixOperator(local_matrices[ii],
+                                                       source_id='domain_{}'.format(jj),
+                                                       range_id='domain_{}'.format(ii))
                 rhss.append(o.range.make_array([local_vectors[ii]]))
             elif (ii, jj) in coupling_matrices:
-                ops[ii, jj] = DuneXTMatrixOperator(coupling_matrices[(ii, jj)])
+                ops[ii, jj] = DuneXTMatrixOperator(coupling_matrices[(ii, jj)],
+                                                   source_id='domain_{}'.format(jj),
+                                                   range_id='domain_{}'.format(ii))
     block_op = BlockOperator(ops)
     block_rhs = VectorFunctional(block_op.range.make_array(rhss))
 
@@ -155,4 +165,12 @@ def discretize():
     return d
 
 d = discretize()
-d.visualize(d.solve(), filename='foo')
+# d.visualize(d.solve(), filename='foo')
+
+U = d.solve()
+bases = {b.space.id: b.copy() for b in U._blocks}
+from pymor.algorithms.projection import project_system
+pop = project_system(d.operator, bases, bases)
+prhs = project_system(d.rhs, None, bases)
+
+print(pop.apply_inverse(prhs.as_vector()).data)
