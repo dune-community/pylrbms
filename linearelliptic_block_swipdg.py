@@ -167,10 +167,12 @@ def discretize():
 d = discretize()
 # d.visualize(d.solve(), filename='foo')
 
+from pymor.reductors.system import GenericRBSystemReductor
+
 U = d.solve()
 bases = {b.space.id: b.copy() for b in U._blocks}
-from pymor.algorithms.projection import project_system
-pop = project_system(d.operator, bases, bases)
-prhs = project_system(d.rhs, None, bases)
-
-print(pop.apply_inverse(prhs.as_vector()).data)
+reductor = GenericRBSystemReductor(d, bases)
+rd = reductor.reduce()
+u = rd.solve()
+UU = reductor.reconstruct(u)
+print((U - UU).l2_norm() / U.l2_norm())
