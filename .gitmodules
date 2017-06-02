@@ -24,15 +24,18 @@
 [submodule "dune-istl"]
 	path = dune-istl
 	url = http://gitlab.dune-project.org/core/dune-istl.git
+        ignore = dirty
 [submodule "configs"]
 	path = config.opts
 	url = https://github.com/dune-community/config.opts.git
 [submodule "dune-python"]
 	path = dune-python
 	url = https://gitlab.dune-project.org/quality/dune-python.git
+        ignore = dirty
 [submodule "dune-testtools"]
 	path = dune-testtools
 	url = https://gitlab.dune-project.org/quality/dune-testtools.git
+        ignore = dirty
 [submodule "dune-xt-common"]
 	path = dune-xt-common
 	url = https://github.com/dune-community/dune-xt-common.git
@@ -51,18 +54,23 @@
 [submodule "dune-alugrid"]
 	path = dune-alugrid
 	url = https://gitlab.dune-project.org/extensions/dune-alugrid.git
+        ignore = dirty
 [submodule "pymor"]
 	path = pymor
 	url = http://dune-project.uni-muenster.de/repos/projects/pymor.git
 [submodule "dune-localfunctions"]
 	path = dune-localfunctions
 	url = http://gitlab.dune-project.org/core/dune-localfunctions.git
+        ignore = dirty
 [submodule "dune-pdelab"]
 	path = dune-pdelab
 	url = https://gitlab.dune-project.org/pdelab/dune-pdelab.git
+        ignore = dirty
 [submodule "dune-typetree"]
 	path = dune-typetree
 	url = http://gitlab.dune-project.org/staging/dune-typetree.git
+        ignore = dirty
 [submodule "dune-functions"]
 	path = dune-functions
 	url = https://gitlab.dune-project.org/staging/dune-functions.git
+        ignore = dirty
