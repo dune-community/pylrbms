@@ -4,7 +4,290 @@ from itertools import product
 import numpy as np
 
 from pymor.basic import *
+from pymor.core.interfaces import ImmutableInterface
+from pymor.operators.basic import OperatorBase
 from pymor.reductors.system import GenericRBSystemReductor
+
+from dune.xt.la import IstlDenseVectorDouble as Vector
+from dune.gdt import make_discrete_function
+
+
+class EstimatorOperatorbase(OperatorBase):
+
+    linear = True
+
+    def __init__(self, subdomain, space, grid, block_space, global_rt_space, local_boundary_info,
+                 lambda_hat, lambda_xi, lambda_xi_prime, kappa):
+        self.source = self.range = self.space = space
+        self.grid = grid
+        self.block_space = block_space
+        self.global_rt_space = global_rt_space
+        self.subdomain = subdomain
+        self.neighborhood = grid.neighborhood_of(subdomain)
+        self.local_boundary_info = local_boundary_info
+        self.lambda_hat = lambda_hat
+        self.lambda_xi = lambda_xi
+        self.lambda_xi_prime = lambda_xi_prime
+        self.kappa = kappa
+
+    def localize_to_subdomain_with_neighborhood_support(self, U):
+        assert len(U) == 1
+
+        neighborhood_space = self.block_space.restricted_to_neighborhood(self.neighborhood)
+
+        def make_func(ss):
+            return make_discrete_function(
+                neighborhood_space,
+                neighborhood_space.project_onto_neighborhood(
+                    [U._blocks[nn]._list[0].impl if nn == ss else Vector(block_space.local_space(nn).size(), 0.)
+                     for nn in self.neighborhood],
+                    self.neighborhood))
+
+        return {nn: make_func(nn) for nn in self.neighborhood}
+
+    def localize_to_subdomain_with_global_support(self, U):
+        assert len(U) == 1
+
+        def make_func(ss):
+            return make_discrete_function(
+                self.block_space,
+                self.block_space.project_onto_neighborhood(
+                    [U._blocks[nn]._list[0].impl if nn == ss else Vector(block_space.local_space(nn).size(), 0.)
+                     for nn in range(self.grid.num_subdomains)],
+                    set([nn for nn in range(self.grid.num_subdomains)])
+                )
+            )
+        return {nn: make_func(nn) for nn in self.neighborhood}
+
+
+class NonconformatyOperator(EstimatorOperatorbase):
+
+    def apply(self, U, mu=None):
+        raise NotImplementedError
+
+    def apply2(self, V, U, mu=None):
+        from dune.gdt import make_ESV2007_nonconformity_product_dd_subdomain_part_dd_subdomain_oversampled_part \
+            as make_local_nonconformity_product
+
+        assert len(V) == 1 and len(U) == 1
+        assert V in self.space and U in self.space
+
+        local_eta_nc_squared = 0
+        subdomain_vh_with_neighborhood_support = self.localize_to_subdomain_with_neighborhood_support(V)
+        subdomain_uh_with_neighborhood_support = self.localize_to_subdomain_with_neighborhood_support(U)
+        for jj in self.neighborhood:
+            for kk in self.neighborhood:
+                local_eta_nc_squared += make_local_nonconformity_product(
+                    self.grid, self.subdomain, self.subdomain, self.local_boundary_info,
+                    self.lambda_hat, self.kappa,
+                    subdomain_vh_with_neighborhood_support[jj],
+                    subdomain_uh_with_neighborhood_support[kk],
+                    over_integrate=2).apply2()
+        return np.array([[local_eta_nc_squared]])
+
+
+class ResidualPartOperator(EstimatorOperatorbase):
+
+    linear = True
+
+    def apply(self, U, mu=None):
+        raise NotImplementedError
+
+    def apply2(self, V, U, mu=None):
+        from dune.gdt import (
+            RS2017_apply_l2_product as apply_l2_product,
+            apply_diffusive_flux_reconstruction_operator
+        )
+
+        assert len(V) == 1 and len(U) == 1
+        assert V in self.space and U in self.space
+
+        local_eta_r_squared = 0
+        subdomain_vhs_with_global_support = self.localize_to_subdomain_with_global_support(V)
+        subdomain_uhs_with_global_support = self.localize_to_subdomain_with_global_support(U)
+
+        for jj in self.neighborhood:
+            reconstructed_vh_jj_with_global_support = make_discrete_function(self.global_rt_space)
+            apply_diffusive_flux_reconstruction_operator(
+                self.lambda_xi_prime, self.kappa,
+                subdomain_vhs_with_global_support[jj],
+                reconstructed_vh_jj_with_global_support)
+
+            for kk in self.neighborhood:
+                reconstructed_uh_kk_with_global_support = make_discrete_function(self.global_rt_space)
+                apply_diffusive_flux_reconstruction_operator(
+                    self.lambda_xi_prime, self.kappa,
+                    subdomain_uhs_with_global_support[kk],
+                    reconstructed_uh_kk_with_global_support)
+
+                local_eta_r_squared += apply_l2_product(
+                    self.grid, self.subdomain,
+                    reconstructed_vh_jj_with_global_support.divergence(),
+                    reconstructed_uh_kk_with_global_support.divergence(),
+                    over_integrate=2)
+
+        return local_eta_r_squared
+
+
+class ResidualPartFunctional(EstimatorOperatorbase):
+
+    linear = True
+
+    def __init__(self, f, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.range = NumpyVectorSpace(1)
+        self.f = f
+
+    def apply(self, U, mu=None):
+        from dune.gdt import (
+            RS2017_apply_l2_product as apply_l2_product,
+            apply_diffusive_flux_reconstruction_operator
+        )
+
+        assert len(U) == 1
+        assert U in self.space and U in self.space
+
+        local_eta_r_squared = 0
+        subdomain_uhs_with_global_support = self.localize_to_subdomain_with_global_support(U)
+
+        for jj in self.neighborhood:
+            reconstructed_uh_jj_with_global_support = make_discrete_function(self.global_rt_space)
+            apply_diffusive_flux_reconstruction_operator(
+                self.lambda_xi_prime, self.kappa,
+                subdomain_uhs_with_global_support[jj],
+                reconstructed_uh_jj_with_global_support)
+            local_eta_r_squared += apply_l2_product(
+                self.grid, self.subdomain,
+                self.f,
+                reconstructed_uh_jj_with_global_support.divergence(),
+                over_integrate=2)
+
+        return local_eta_r_squared
+
+
+class DiffusiveFluxOperator(EstimatorOperatorbase):
+
+    linear = True
+
+    def apply(self, U, mu=None):
+        raise NotImplementedError
+
+    def apply2(self, V, U, mu=None):
+        from dune.gdt import (
+            RS2017_diffusive_flux_indicator_apply_aa_product as apply_diffusive_flux_aa_product,
+            RS2017_diffusive_flux_indicator_apply_ab_product as apply_diffusive_flux_ab_product,
+            RS2017_diffusive_flux_indicator_apply_bb_product as apply_diffusive_flux_bb_product,
+            apply_diffusive_flux_reconstruction_operator
+        )
+
+        assert len(V) == 1 and len(U) == 1
+        assert V in self.space and U in self.space
+
+        subdomain_vh = make_discrete_function(self.block_space.local_space(self.subdomain), V._blocks[self.subdomain]._list[0].impl)
+        subdomain_uh = make_discrete_function(self.block_space.local_space(self.subdomain), U._blocks[self.subdomain]._list[0].impl)
+        subdomain_vhs_with_global_support = self.localize_to_subdomain_with_global_support(V)
+        subdomain_uhs_with_global_support = self.localize_to_subdomain_with_global_support(U)
+
+        local_eta_df_squared = 0
+        local_eta_df_squared += apply_diffusive_flux_aa_product(
+            self.grid, self.subdomain,
+            self.lambda_hat, lambda_u=self.lambda_xi, lambda_v=self.lambda_xi_prime,
+            kappa=self.kappa,
+            u=subdomain_uh,
+            v=subdomain_vh,
+            over_integrate=2)
+
+        for jj in self.neighborhood:
+            reconstructed_vh_jj_with_global_support = make_discrete_function(self.global_rt_space)
+            apply_diffusive_flux_reconstruction_operator(
+                self.lambda_xi, self.kappa,
+                subdomain_vhs_with_global_support[jj],
+                reconstructed_vh_jj_with_global_support)
+            local_eta_df_squared += apply_diffusive_flux_ab_product(
+                self.grid, self.subdomain,
+                self.lambda_hat,
+                lambda_u=self.lambda_xi_prime,
+                kappa=self.kappa,
+                u=subdomain_uh,
+                reconstructed_v=reconstructed_vh_jj_with_global_support,
+                over_integrate=2)
+
+            reconstructed_uh_jj_with_global_support = make_discrete_function(self.global_rt_space)
+            apply_diffusive_flux_reconstruction_operator(
+                self.lambda_xi, self.kappa,
+                subdomain_uhs_with_global_support[jj],
+                reconstructed_uh_jj_with_global_support)
+            # eta df, u x reconstructed_u part
+            local_eta_df_squared += apply_diffusive_flux_ab_product(
+                self.grid, self.subdomain,
+                self.lambda_hat,
+                lambda_u=self.lambda_xi_prime,
+                kappa=self.kappa,
+                u=subdomain_vh,
+                reconstructed_v=reconstructed_uh_jj_with_global_support,
+                over_integrate=2)
+
+            for kk in self.neighborhood:
+                reconstructed_uh_kk_with_global_support = make_discrete_function(self.global_rt_space)
+                apply_diffusive_flux_reconstruction_operator(
+                    self.lambda_xi_prime, self.kappa,
+                    subdomain_uhs_with_global_support[kk],
+                    reconstructed_uh_kk_with_global_support)
+                # eta df, reconstructed_u x reconstructed_u part
+                local_eta_df_squared += apply_diffusive_flux_bb_product(
+                    self.grid, self.subdomain,
+                    self.lambda_hat, self.kappa,
+                    reconstructed_vh_jj_with_global_support,
+                    reconstructed_uh_kk_with_global_support,
+                    over_integrate=2)
+        return np.array([[local_eta_df_squared]])
+
+
+class Estimator(ImmutableInterface):
+
+    def __init__(self, min_diffusion_evs, subdomain_diameters):
+        self.min_diffusion_evs = min_diffusion_evs
+        self.subdomain_diameters = subdomain_diameters
+
+    def estimate(self, U, mu, discretization, decompose=False):
+        d = discretization
+
+        alpha_mu_mu_bar = 1.
+        gamma_mu_mu_bar = 1.
+        alpha_mu_mu_hat = 1.
+
+        local_eta_nc = np.zeros(grid.num_subdomains)
+        local_eta_r = np.zeros(grid.num_subdomains)
+        local_eta_df = np.zeros(grid.num_subdomains)
+
+        for ii in range(grid.num_subdomains):
+            local_eta_nc[ii] = d.operators['nc_{}'.format(ii)].apply2(U, U)
+            local_eta_r[ii] += d._local_eta_rf_squared[ii]
+            local_eta_r[ii] -= 2*d.operators['r1_{}'.format(ii)].apply(U)
+            local_eta_r[ii] += d.operators['r2_{}'.format(ii)].apply2(U, U)
+            local_eta_df[ii] += d.operators['df_{}'.format(ii)].apply2(U, U)
+
+            # eta r, scale
+            poincaree_constant = 1./(np.pi**2)
+            min_diffusion_ev = self.min_diffusion_evs[ii]
+            subdomain_h = self.subdomain_diameters[ii]
+            local_eta_r[ii] *= (poincaree_constant/min_diffusion_ev) * subdomain_h**2
+
+            print('.', end='')
+
+        local_eta_nc = np.sqrt(local_eta_nc)
+        local_eta_r = np.sqrt(local_eta_r)
+        local_eta_df = np.sqrt(local_eta_df)
+
+        eta = 0.
+        eta +=     np.sqrt(gamma_mu_mu_bar)  * np.linalg.norm(local_eta_nc)
+        eta += (1./np.sqrt(alpha_mu_mu_hat)) * np.linalg.norm(local_eta_r + local_eta_df)
+        eta *=  1./np.sqrt(alpha_mu_mu_bar)
+
+        if decompose:
+            return eta, (local_eta_nc, local_eta_r, local_eta_df)
+        else:
+            return eta
 
 
 class DuneDiscretization(StationaryDiscretization):
@@ -19,11 +302,18 @@ class DuneDiscretization(StationaryDiscretization):
         )
 
     def as_generic_type(self):
+        ops = dict(self.operators)
+        del ops['operator']
+        del ops['rhs']
+        del ops['global_op']
+        del ops['global_rhs']
         return StationaryDiscretization(self.operator, self.rhs, parameter_space=self.parameter_space)
 
     def visualize(self, U, *args, **kwargs):
-        U = self.operators['global_op'].source.from_data(U.data)
-        self.visualizer.visualize(U, self, *args, **kwargs)
+        self.visualizer.visualize(self.unblock(U), self, *args, **kwargs)
+
+    def unblock(self, U):
+        return self.operators['global_op'].source.from_data(U.data)
 
 
 def discretize():
@@ -33,6 +323,7 @@ def discretize():
 
     from dune.xt.functions import (
         make_checkerboard_function_1x1,
+        make_constant_function_1x1,
         make_constant_function_2x2,
         make_expression_function_1x1
     )
@@ -53,11 +344,15 @@ def discretize():
         make_l2_volume_vector_functional,
         make_local_elliptic_swipdg_affine_factor_inner_integral_operator_1x1_p1_dg_fem_space_dd_subdomain_coupling_intersection as make_local_elliptic_swipdg_coupling_operator,  # NOQA
         make_local_elliptic_swipdg_affine_factor_boundary_integral_operator_1x1_p1_dg_fem_space_dd_subdomain_coupling_intersection as make_local_elliptic_swipdg_boundary_operator,  # NOQA
-        make_system_assembler
+        make_system_assembler,
+        make_rt_leaf_view_to_2x1_pdelab_p0_space as make_rt_space,
+        RS2017_residual_indicator_min_diffusion_eigenvalue as min_diffusion_eigenvalue,
+        RS2017_residual_indicator_subdomain_diameter as subdomain_diameter,
     )
 
-    grid = make_grid(lower_left=[0, 0], upper_right=[1, 1], num_elements=[4, 4], num_refinements=4,
-                     num_partitions=[3, 3])
+    inner_boundary_id = 18446744073709551573
+    grid = make_grid(lower_left=[-1, -1], upper_right=[1, 1], num_elements=[4, 4], num_refinements=2,
+                     num_partitions=[2, 2], num_oversampling_layers=4, inner_boundary_segment_index=inner_boundary_id)
 
     all_dirichlet_boundary_info = make_boundary_info(grid, {'type': 'xt.grid.boundaryinfo.alldirichlet'})
     all_neumann_boundary_info = make_subdomain_boundary_info(grid, {'type': 'xt.grid.boundaryinfo.allneumann'})
@@ -67,20 +362,16 @@ def discretize():
     def diffusion_function_factory(ix, iy):
         values = [[0.]]*(YBLOCKS*XBLOCKS)
         values[ix + XBLOCKS*iy] = [1.]
-        return make_checkerboard_function_1x1(grid_provider=grid, lower_left=[0, 0], upper_right=[1, 1],
+        return make_checkerboard_function_1x1(grid_provider=grid, lower_left=[-1, -1], upper_right=[1, 1],
                                               num_elements=[XBLOCKS, YBLOCKS],
                                               values=values, name='diffusion_{}_{}'.format(ix, iy))
 
     diffusion_functions = [diffusion_function_factory(ix, iy)
                            for ix, iy in product(range(XBLOCKS), range(YBLOCKS))]
 
-    # values = [[0.1]]*(YBLOCKS*XBLOCKS)
-    # values[0] = [1.]
-    # lambdas = make_checkerboard_function_1x1(grid_provider=grid, lower_left=[0, 0], upper_right=[1, 1],
-    #                                          num_elements=[XBLOCKS, YBLOCKS],
-    #                                          values=values, name='diffusion')
     kappa = make_constant_function_2x2(grid, [[1., 0.], [0., 1.]], name='diffusion')
-    f = make_expression_function_1x1(grid, 'x', '1', order=0, name='force')
+    # f = make_expression_function_1x1(grid, 'x', '1', order=0, name='force')
+    f = make_expression_function_1x1(grid, 'x', '0.5*pi*pi*cos(0.5*pi*x[0])*cos(0.5*pi*x[1])', order=2, name='f')
 
     block_space = make_block_space(grid)
 
@@ -267,19 +558,48 @@ def discretize():
     op = LincombOperator(ops, coefficients)
     block_op = LincombOperator(block_ops, coefficients)
 
+    local_boundary_info = make_subdomain_boundary_info(
+        grid,
+        {'type': 'xt.grid.boundaryinfo.boundarysegmentindexbased',
+         'default': 'dirichlet',
+         'neumann': '[{} {}]'.format(inner_boundary_id, inner_boundary_id+1)})
+
+    lambda_hat = make_constant_function_1x1(grid, 1.0, name='lambda')
+    lambda_xi = lambda_hat
+    lambda_xi_prime = lambda_hat
+    operators = {'global_op': op, 'global_rhs': rhs}
+    global_rt_space = make_rt_space(grid)
+
+    for ii in range(grid.num_subdomains):
+        operators['nc_{}'.format(ii)] = NonconformatyOperator(ii, block_op.source, grid, block_space, global_rt_space,
+                                                              local_boundary_info, lambda_hat, lambda_xi, lambda_xi_prime, kappa)
+        operators['r1_{}'.format(ii)] = ResidualPartFunctional(f, ii, block_op.source, grid, block_space, global_rt_space,
+                                                               local_boundary_info, lambda_hat, lambda_xi, lambda_xi_prime, kappa)
+        operators['r2_{}'.format(ii)] = ResidualPartOperator(ii, block_op.source, grid, block_space, global_rt_space,
+                                                             local_boundary_info, lambda_hat, lambda_xi, lambda_xi_prime, kappa)
+        operators['df_{}'.format(ii)] = DiffusiveFluxOperator(ii, block_op.source, grid, block_space, global_rt_space,
+                                                              local_boundary_info, lambda_hat, lambda_xi, lambda_xi_prime, kappa)
+
+    min_diffusion_evs = np.array([min_diffusion_eigenvalue(grid, ii, lambda_hat, kappa) for ii in
+                                  range(grid.num_subdomains)])
+    subdomain_diameters = np.array([subdomain_diameter(grid, ii) for ii in range(grid.num_subdomains)])
+    estimator = Estimator(min_diffusion_evs, subdomain_diameters)
+
+    from dune.gdt import RS2017_apply_l2_product as apply_l2_product
+    local_eta_rf_squared = np.array([apply_l2_product(grid, ii, f, f, over_integrate=2) for ii in
+                                     range(grid.num_subdomains)])
     from pymor.bindings.dunegdt import DuneGDTVisualizer
 
     d = DuneDiscretization(block_op, block_rhs, visualizer=DuneGDTVisualizer(block_space),
-                           operators={'global_op': op, 'global_rhs': rhs})
+                           operators=operators, estimator=estimator)
     d = d.with_(parameter_space=CubicParameterSpace(d.parameter_type, 0.1, 1.))
+    d._local_eta_rf_squared = local_eta_rf_squared
 
-    return d
-
-
-d = discretize()
+    return d, grid, block_space, f, kappa
 
 
-# print(d.operators['global_op'].matrix.sup_norm())
+d, grid, block_space, f, kappa = discretize()
+
 
 U = d.solution_space.empty()
 for mu in d.parameter_space.sample_uniformly(2):
@@ -296,5 +616,15 @@ for mu in d.parameter_space.sample_uniformly(2):
 UU = reductor.reconstruct(u)
 print((U - UU).l2_norm() / U.l2_norm())
 
-# result = reduction_error_analysis(rd, d, reductor, test_mus=10, estimator=False, condition=True, plot=True)
-# print(result['summary'])
+
+U = d.solve([1., 1., 1., 1.])
+
+print('estimating error ', end='')
+
+eta, (local_eta_nc, local_eta_r, local_eta_df) = d.estimate(U, decompose=True)
+
+print('')
+print('  nonconformity indicator:  {} (should be 1.66e-01)'.format(np.linalg.norm(local_eta_nc)))
+print('  residual indicator:       {} (should be 2.89e-01)'.format(np.linalg.norm(local_eta_r)))
+print('  diffusive flux indicator: {} (should be 3.55e-01)'.format(np.linalg.norm(local_eta_df)))
+print('  estimated error:          {}'.format(eta))
