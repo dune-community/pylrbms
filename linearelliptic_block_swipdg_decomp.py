@@ -666,7 +666,7 @@ if __name__ == '__main__':
         try:
             reductor.extend_basis(snapshot)
         except ExtensionError:
-            break
+            pass
     d.visualize(U, filename='U')
     rd = reductor.reduce()
 
