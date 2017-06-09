@@ -273,6 +273,7 @@ class Estimator(ImmutableInterface):
         local_eta_nc = np.zeros(num_subdomains)
         local_eta_r = np.zeros(num_subdomains)
         local_eta_df = np.zeros(num_subdomains)
+        local_indicators = np.zeros(num_subdomains)
 
         for ii in range(num_subdomains):
             local_eta_nc[ii] = d.operators['nc_{}'.format(ii)].apply2(U, U)
@@ -287,6 +288,10 @@ class Estimator(ImmutableInterface):
             subdomain_h = self.subdomain_diameters[ii]
             local_eta_r[ii] *= (poincaree_constant/min_diffusion_ev) * subdomain_h**2
 
+            local_indicators[ii] = (2./alpha_mu_mu_bar) * (  gamma_mu_mu_bar * local_eta_nc[ii]
+                                                           + alpha_mu_mu_hat * (  np.sqrt(local_eta_r[ii])
+                                                                                + np.sqrt(local_eta_df[ii]))**2)
+
         local_eta_nc = np.sqrt(local_eta_nc)
         local_eta_r = np.sqrt(local_eta_r)
         local_eta_df = np.sqrt(local_eta_df)
@@ -297,7 +302,7 @@ class Estimator(ImmutableInterface):
         eta *=  1./np.sqrt(alpha_mu_mu_bar)
 
         if decompose:
-            return eta, (local_eta_nc, local_eta_r, local_eta_df)
+            return eta, (local_eta_nc, local_eta_r, local_eta_df), local_indicators
         else:
             return eta
 
@@ -655,7 +660,7 @@ if __name__ == '__main__':
 
     print('estimating error ', end='', flush=True)
 
-    eta, (local_eta_nc, local_eta_r, local_eta_df) = d.estimate(U, decompose=True)
+    eta, (local_eta_nc, local_eta_r, local_eta_df), _ = d.estimate(U, decompose=True)
 
     print('')
     print('  nonconformity indicator:  {} (should be 1.66e-01)'.format(np.linalg.norm(local_eta_nc)))
@@ -668,7 +673,7 @@ if __name__ == '__main__':
 
     print('estimating reduced error ', end='', flush=True)
 
-    eta, (local_eta_nc, local_eta_r, local_eta_df) = rd.estimate(u, decompose=True)
+    eta, (local_eta_nc, local_eta_r, local_eta_df), _ = rd.estimate(u, decompose=True)
 
     print('')
     print('  nonconformity indicator:  {} (should be 1.66e-01)'.format(np.linalg.norm(local_eta_nc)))
