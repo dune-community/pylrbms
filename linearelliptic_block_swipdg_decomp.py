@@ -368,8 +368,8 @@ def discretize():
     XBLOCKS = 4; YBLOCKS = 1
 
     def diffusion_function_factory(ix, iy):
-        values = [[0.1]]*(YBLOCKS*XBLOCKS)
-        values[ix + XBLOCKS*iy] = [0.7]
+        values = [[0.]]*(YBLOCKS*XBLOCKS)
+        values[ix + XBLOCKS*iy] = [1.]
         return make_checkerboard_function_1x1(grid_provider=grid, lower_left=[-1, -1], upper_right=[1, 1],
                                               num_elements=[XBLOCKS, YBLOCKS],
                                               values=values, name='diffusion_{}_{}'.format(ix, iy))
