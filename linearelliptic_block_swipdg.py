@@ -48,7 +48,7 @@ class EstimatorOperatorBase(OperatorBase):
         return make_discrete_function(
             neighborhood_space,
             neighborhood_space.project_onto_neighborhood(
-                [U._list[0].impl if nn == ss else Vector(block_space.local_space(nn).size(), 0.)
+                [U._list[0].impl if nn == ss else Vector(self.block_space.local_space(nn).size(), 0.)
                  for nn in self.neighborhood],
                 self.neighborhood))
 
@@ -58,7 +58,7 @@ class EstimatorOperatorBase(OperatorBase):
         return make_discrete_function(
             self.block_space,
             self.block_space.project_onto_neighborhood(
-                [U._list[0].impl if nn == ss else Vector(block_space.local_space(nn).size(), 0.)
+                [U._list[0].impl if nn == ss else Vector(self.block_space.local_space(nn).size(), 0.)
                  for nn in range(self.grid.num_subdomains)],
                 set([nn for nn in range(self.grid.num_subdomains)])
             )
@@ -264,15 +264,17 @@ class Estimator(ImmutableInterface):
     def estimate(self, U, mu, discretization, decompose=False):
         d = discretization
 
+        num_subdomains = len(self.subdomain_diameters)
+
         alpha_mu_mu_bar = 1.
         gamma_mu_mu_bar = 1.
         alpha_mu_mu_hat = 1.
 
-        local_eta_nc = np.zeros(grid.num_subdomains)
-        local_eta_r = np.zeros(grid.num_subdomains)
-        local_eta_df = np.zeros(grid.num_subdomains)
+        local_eta_nc = np.zeros(num_subdomains)
+        local_eta_r = np.zeros(num_subdomains)
+        local_eta_df = np.zeros(num_subdomains)
 
-        for ii in range(grid.num_subdomains):
+        for ii in range(num_subdomains):
             local_eta_nc[ii] = d.operators['nc_{}'.format(ii)].apply2(U, U)
             local_eta_r[ii] += self.local_eta_rf_squared[ii]
             local_eta_r[ii] -= 2*d.operators['r1_{}'.format(ii)].apply(U).data
