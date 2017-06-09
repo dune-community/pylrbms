@@ -8,6 +8,7 @@ from itertools import product
 import numpy as np
 
 from pymor.basic import *
+from pymor.core.exceptions import ExtensionError
 from pymor.core.interfaces import ImmutableInterface
 from pymor.operators.basic import OperatorBase
 from pymor.operators.block import BlockOperator
@@ -594,10 +595,21 @@ def discretize():
                                                       local_boundary_info, lambda_hat, lambda_xi, lambda_xi_prime, kappa)
                 df_ops[jj, kk] = DiffusiveFluxOperator(ii, jj, kk, block_op.source, grid, block_space, global_rt_space,
                                                        local_boundary_info, lambda_hat, lambda_xi, lambda_xi_prime, kappa)
-        operators['nc_{}'.format(ii)] = BlockOperator(nc_ops, name='nonconformity_{}'.format(ii))
-        operators['r1_{}'.format(ii)] = BlockOperator(r1_ops, name='residual_functional_{}'.format(ii))
-        operators['r2_{}'.format(ii)] = BlockOperator(r2_ops, name='residual_{}'.format(ii))
-        operators['df_{}'.format(ii)] = BlockOperator(df_ops, name='diffusive_flux_{}'.format(ii))
+        operators['nc_{}'.format(ii)] = BlockOperator(nc_ops,
+                                                      range_spaces=block_op.range.subspaces,
+                                                      source_spaces=block_op.source.subspaces,
+                                                      name='nonconformity_{}'.format(ii))
+        operators['r1_{}'.format(ii)] = BlockOperator(r1_ops,
+                                                      source_spaces=block_op.source.subspaces,
+                                                      name='residual_functional_{}'.format(ii))
+        operators['r2_{}'.format(ii)] = BlockOperator(r2_ops,
+                                                      range_spaces=block_op.range.subspaces,
+                                                      source_spaces=block_op.source.subspaces,
+                                                      name='residual_{}'.format(ii))
+        operators['df_{}'.format(ii)] = BlockOperator(df_ops,
+                                                      range_spaces=block_op.range.subspaces,
+                                                      source_spaces=block_op.source.subspaces,
+                                                      name='diffusive_flux_{}'.format(ii))
 
     from dune.gdt import RS2017_apply_l2_product as apply_l2_product
     min_diffusion_evs = np.array([min_diffusion_eigenvalue(grid, ii, lambda_hat, kappa) for ii in
@@ -616,47 +628,48 @@ def discretize():
     return d, grid, block_space, f, kappa
 
 
-d, grid, block_space, f, kappa = discretize()
+if __name__ == '__main__':
+    d, grid, block_space, f, kappa = discretize()
 
+    U = d.solution_space.empty()
+    reductor = GenericRBSystemReductor(d)
+    for mu in d.parameter_space.sample_uniformly(2):
+        snapshot = d.solve(mu)
+        U.append(snapshot)
+        try:
+            reductor.extend_basis(snapshot)
+        except ExtensionError:
+            break
+    d.visualize(U, filename='U')
+    rd = reductor.reduce()
 
-U = d.solution_space.empty()
-for mu in d.parameter_space.sample_uniformly(2):
-    U.append(d.solve(mu))
-d.visualize(U, filename='U')
-bases = {b.space.id: b.copy() for b in U._blocks}
-for V in bases.values():
-    gram_schmidt(V, copy=False)
-reductor = GenericRBSystemReductor(d, bases)
-rd = reductor.reduce()
-u = rd.solution_space.empty()
-for mu in d.parameter_space.sample_uniformly(2):
-    u.append(rd.solve(mu))
-UU = reductor.reconstruct(u)
-print((U - UU).l2_norm() / U.l2_norm())
+    u = rd.solution_space.empty()
+    for mu in d.parameter_space.sample_uniformly(2):
+        u.append(rd.solve(mu))
+    UU = reductor.reconstruct(u)
+    print((U - UU).l2_norm() / U.l2_norm())
 
+    U = d.solve([1., 1., 1., 1.])
 
-U = d.solve([1., 1., 1., 1.])
+    print('estimating error ', end='', flush=True)
 
-print('estimating error ', end='', flush=True)
+    eta, (local_eta_nc, local_eta_r, local_eta_df) = d.estimate(U, decompose=True)
 
-eta, (local_eta_nc, local_eta_r, local_eta_df) = d.estimate(U, decompose=True)
+    print('')
+    print('  nonconformity indicator:  {} (should be 1.66e-01)'.format(np.linalg.norm(local_eta_nc)))
+    print('  residual indicator:       {} (should be 2.89e-01)'.format(np.linalg.norm(local_eta_r)))
+    print('  diffusive flux indicator: {} (should be 3.55e-01)'.format(np.linalg.norm(local_eta_df)))
+    print('  estimated error:          {}'.format(eta))
 
-print('')
-print('  nonconformity indicator:  {} (should be 1.66e-01)'.format(np.linalg.norm(local_eta_nc)))
-print('  residual indicator:       {} (should be 2.89e-01)'.format(np.linalg.norm(local_eta_r)))
-print('  diffusive flux indicator: {} (should be 3.55e-01)'.format(np.linalg.norm(local_eta_df)))
-print('  estimated error:          {}'.format(eta))
+    rd = rd.with_(estimator=d.estimator)
+    u = rd.solve([1., 1., 1., 1.])
 
+    print('estimating reduced error ', end='', flush=True)
 
-rd = rd.with_(estimator=d.estimator)
-u = rd.solve([1., 1., 1., 1.])
+    eta, (local_eta_nc, local_eta_r, local_eta_df) = rd.estimate(u, decompose=True)
 
-print('estimating reduced error ', end='', flush=True)
-
-eta, (local_eta_nc, local_eta_r, local_eta_df) = rd.estimate(u, decompose=True)
-
-print('')
-print('  nonconformity indicator:  {} (should be 1.66e-01)'.format(np.linalg.norm(local_eta_nc)))
-print('  residual indicator:       {} (should be 2.89e-01)'.format(np.linalg.norm(local_eta_r)))
-print('  diffusive flux indicator: {} (should be 3.55e-01)'.format(np.linalg.norm(local_eta_df)))
-print('  estimated error:          {}'.format(eta))
+    print('')
+    print('  nonconformity indicator:  {} (should be 1.66e-01)'.format(np.linalg.norm(local_eta_nc)))
+    print('  residual indicator:       {} (should be 2.89e-01)'.format(np.linalg.norm(local_eta_r)))
+    print('  diffusive flux indicator: {} (should be 3.55e-01)'.format(np.linalg.norm(local_eta_df)))
+    print('  estimated error:          {}'.format(eta))
