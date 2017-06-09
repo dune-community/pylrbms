@@ -57,7 +57,7 @@
         ignore = dirty
 [submodule "pymor"]
 	path = pymor
-	url = http://dune-project.uni-muenster.de/repos/projects/pymor.git
+	url = git@zivgitlab.uni-muenster.de:srave_01/pymor.git
 [submodule "dune-localfunctions"]
 	path = dune-localfunctions
 	url = http://gitlab.dune-project.org/core/dune-localfunctions.git
