@@ -110,7 +110,7 @@ class ResidualPartOperator(EstimatorOperatorBase):
     def _apply2(self, V, U, mu=None):
         from dune.gdt import (
             RS2017_apply_l2_product as apply_l2_product,
-            apply_diffusive_flux_reconstruction_operator
+            RS2017_apply_diffusive_flux_reconstruction_in_neighborhood as apply_diffusive_flux_reconstruction_in_neighborhood
         )
 
         assert len(V) == 1 and len(U) == 1
@@ -120,13 +120,15 @@ class ResidualPartOperator(EstimatorOperatorBase):
         subdomain_uhs_with_global_support = self.localize_to_subdomain_with_global_support(U, self.kk)
 
         reconstructed_vh_jj_with_global_support = make_discrete_function(self.global_rt_space)
-        apply_diffusive_flux_reconstruction_operator(
+        apply_diffusive_flux_reconstruction_in_neighborhood(
+            self.grid, self.subdomain,
             self.lambda_xi, self.kappa,
             subdomain_vhs_with_global_support,
             reconstructed_vh_jj_with_global_support)
 
         reconstructed_uh_kk_with_global_support = make_discrete_function(self.global_rt_space)
-        apply_diffusive_flux_reconstruction_operator(
+        apply_diffusive_flux_reconstruction_in_neighborhood(
+            self.grid, self.subdomain,
             self.lambda_xi_prime, self.kappa,
             subdomain_uhs_with_global_support,
             reconstructed_uh_kk_with_global_support)
@@ -151,7 +153,7 @@ class ResidualPartFunctional(EstimatorOperatorBase):
     def _apply(self, U, mu=None):
         from dune.gdt import (
             RS2017_apply_l2_product as apply_l2_product,
-            apply_diffusive_flux_reconstruction_operator
+            RS2017_apply_diffusive_flux_reconstruction_in_neighborhood as apply_diffusive_flux_reconstruction_in_neighborhood
         )
 
         assert len(U) == 1
@@ -160,7 +162,8 @@ class ResidualPartFunctional(EstimatorOperatorBase):
         subdomain_uhs_with_global_support = self.localize_to_subdomain_with_global_support(U, self.kk)
 
         reconstructed_uh_jj_with_global_support = make_discrete_function(self.global_rt_space)
-        apply_diffusive_flux_reconstruction_operator(
+        apply_diffusive_flux_reconstruction_in_neighborhood(
+            self.grid, self.subdomain,
             self.lambda_xi, self.kappa,
             subdomain_uhs_with_global_support,
             reconstructed_uh_jj_with_global_support)
@@ -185,7 +188,7 @@ class DiffusiveFluxOperator(EstimatorOperatorBase):
             RS2017_diffusive_flux_indicator_apply_aa_product as apply_diffusive_flux_aa_product,
             RS2017_diffusive_flux_indicator_apply_ab_product as apply_diffusive_flux_ab_product,
             RS2017_diffusive_flux_indicator_apply_bb_product as apply_diffusive_flux_bb_product,
-            apply_diffusive_flux_reconstruction_operator
+            RS2017_apply_diffusive_flux_reconstruction_in_neighborhood as apply_diffusive_flux_reconstruction_in_neighborhood
         )
 
         assert len(V) == 1 and len(U) == 1
@@ -195,13 +198,15 @@ class DiffusiveFluxOperator(EstimatorOperatorBase):
         subdomain_uhs_with_global_support = self.localize_to_subdomain_with_global_support(U, self.kk)
 
         reconstructed_vh_jj_with_global_support = make_discrete_function(self.global_rt_space)
-        apply_diffusive_flux_reconstruction_operator(
+        apply_diffusive_flux_reconstruction_in_neighborhood(
+            self.grid, self.subdomain,
             self.lambda_xi, self.kappa,
             subdomain_vhs_with_global_support,
             reconstructed_vh_jj_with_global_support)
 
         reconstructed_uh_kk_with_global_support = make_discrete_function(self.global_rt_space)
-        apply_diffusive_flux_reconstruction_operator(
+        apply_diffusive_flux_reconstruction_in_neighborhood(
+            self.grid, self.subdomain,
             self.lambda_xi_prime, self.kappa,
             subdomain_uhs_with_global_support,
             reconstructed_uh_kk_with_global_support)
@@ -667,7 +672,7 @@ if __name__ == '__main__':
             reductor.extend_basis(snapshot)
         except ExtensionError:
             pass
-    d.visualize(U, filename='U')
+    #d.visualize(U, filename='U')
     rd = reductor.reduce()
 
     u = rd.solution_space.empty()
