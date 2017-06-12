@@ -3,7 +3,10 @@
 from itertools import product
 
 from dune.xt.common import init_logger, init_mpi
-init_mpi()
+try:
+    init_mpi()
+except:
+    pass
 # init_logger()
 
 
@@ -42,8 +45,9 @@ def init_grid_and_problem(config):
     diffusion_functions.append(make_expression_function_1x1(
         grid, 'x', '-1*(cos(0.5*pi*x[0])*cos(0.5*pi*x[1]))', order=2, name='lambda_1'))
 
-    coefficients = [ExpressionParameterFunctional('1.', {'diffusion': (1,)}),
-                    ExpressionParameterFunctional('diffusion', {'diffusion': (1,)})]
+    parameter_type = {'diffusion': (1,)}
+    coefficients = [ExpressionParameterFunctional('1.', parameter_type),
+                    ExpressionParameterFunctional('diffusion', parameter_type)]
 
     kappa = make_constant_function_2x2(grid, [[1., 0.], [0., 1.]], name='kappa')
     f = make_expression_function_1x1(grid, 'x', '0.5*pi*pi*cos(0.5*pi*x[0])*cos(0.5*pi*x[1])', order=2, name='f')
@@ -61,6 +65,7 @@ def init_grid_and_problem(config):
             'lambda_hat': lambda_hat,
             'kappa': kappa,
             'f': f,
+            'parameter_type': parameter_type,
             'mu_bar': (1,),
             'mu_hat': (1,),
             'mu_min': (0.1,),
