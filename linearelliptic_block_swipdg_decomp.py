@@ -18,7 +18,7 @@ config = {'num_coarse_grid_elements': [4, 4],
 grid_and_problem_data = init_grid_and_problem(config)
 grid = grid_and_problem_data['grid']
 
-d, block_space = discretize(grid_and_problem_data)
+d, block_space, _ = discretize(grid_and_problem_data)
 
 mu = d.parse_parameter([1, 1., 1., 1.])
 
