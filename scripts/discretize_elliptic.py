@@ -347,7 +347,13 @@ class Estimator(ImmutableInterface):
         eta *=  1./np.sqrt(alpha_mu_mu_bar)
 
         if decompose:
-            return eta, (local_eta_nc, local_eta_r, local_eta_df)
+            local_indicators = np.zeros(self.num_subdomains)
+            for ii in range(self.num_subdomains):
+                local_indicators[ii] = (2./alpha_mu_mu_bar) * (
+                               gamma_mu_mu_bar * local_eta_nc[ii]**2
+                        + (1./alpha_mu_mu_hat) * (local_eta_r[ii] + local_eta_df[ii])**2)
+
+            return eta, (local_eta_nc, local_eta_r, local_eta_df), local_indicators
         else:
             return eta
 
@@ -379,7 +385,7 @@ class DuneDiscretization(StationaryDiscretization):
 
 
 def discretize(grid_and_probem_data):
-    print('discretizing ...', end='')
+    print('discretizing ... ', end='', flush=True)
 
     grid, boundary_info, inner_boundary_id = (grid_and_probem_data['grid'],
                                               grid_and_probem_data['boundary_info'],
