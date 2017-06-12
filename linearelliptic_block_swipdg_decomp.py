@@ -26,7 +26,7 @@ U = d.solve(mu)
 
 print('estimating error ', end='', flush=True)
 
-eta, (local_eta_nc, local_eta_r, local_eta_df) = d.estimate(U, mu=mu, decompose=True)
+eta, (local_eta_nc, local_eta_r, local_eta_df), _ = d.estimate(U, mu=mu, decompose=True)
 
 print('')
 print('  nonconformity indicator:  {} (should be 1.66e-01)'.format(np.linalg.norm(local_eta_nc)))
@@ -57,7 +57,7 @@ u = rd.solve(mu)
 
 print('estimating reduced error ', end='', flush=True)
 
-eta, (local_eta_nc, local_eta_r, local_eta_df) = rd.estimate(u, mu=mu, decompose=True)
+eta, (local_eta_nc, local_eta_r, local_eta_df), _ = rd.estimate(u, mu=mu, decompose=True)
 
 print('')
 print('  nonconformity indicator:  {} (should be 1.66e-01)'.format(np.linalg.norm(local_eta_nc)))
