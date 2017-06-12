@@ -390,7 +390,8 @@ def discretize(grid_and_problem_data):
     grid, boundary_info, inner_boundary_id = (grid_and_problem_data['grid'],
                                               grid_and_problem_data['boundary_info'],
                                               grid_and_problem_data['inner_boundary_id'])
-    local_problem_boundary_info = make_subdomain_boundary_info(grid, {'type': 'xt.grid.boundaryinfo.allneumann'})
+    local_all_dirichlet_boundary_info = make_subdomain_boundary_info(grid, {'type': 'xt.grid.boundaryinfo.alldirichlet'})
+    local_all_neumann_boundary_info = make_subdomain_boundary_info(grid, {'type': 'xt.grid.boundaryinfo.allneumann'})
     neighborhood_boundary_info = make_subdomain_boundary_info(
         grid,
         {'type': 'xt.grid.boundaryinfo.boundarysegmentindexbased',
@@ -457,7 +458,7 @@ def discretize(grid_and_problem_data):
                                                                 coupling_patterns_out_in[(ii, jj)])
 
         def assemble_local_contributions(subdomain):
-            ipdg_operator = make_elliptic_swipdg_matrix_operator(lambda_, kappa, local_problem_boundary_info,
+            ipdg_operator = make_elliptic_swipdg_matrix_operator(lambda_, kappa, local_all_neumann_boundary_info,
                                                                  local_matrices[subdomain],
                                                                  block_space.local_space(subdomain))
             l2_functional = make_l2_volume_vector_functional(f, local_vectors[subdomain],
@@ -601,7 +602,7 @@ def discretize(grid_and_problem_data):
                 func, kappa, tmp_local_matrix.copy(), local_space, over_integrate=0))
             local_product_coeffs.append(coeff)
             local_product_ops.append(make_penalty_product_matrix_operator(
-                grid, ii, neighborhood_boundary_info,
+                grid, ii, local_all_dirichlet_boundary_info,
                 local_space,
                 func, kappa, over_integrate=0))
             local_product_coeffs.append(coeff)
