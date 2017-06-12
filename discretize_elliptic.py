@@ -384,12 +384,12 @@ class DuneDiscretization(StationaryDiscretization):
         return self.operators['global_op'].source.from_data(U.data)
 
 
-def discretize(grid_and_probem_data):
+def discretize(grid_and_problem_data):
     print('discretizing ... ', end='', flush=True)
 
-    grid, boundary_info, inner_boundary_id = (grid_and_probem_data['grid'],
-                                              grid_and_probem_data['boundary_info'],
-                                              grid_and_probem_data['inner_boundary_id'])
+    grid, boundary_info, inner_boundary_id = (grid_and_problem_data['grid'],
+                                              grid_and_problem_data['boundary_info'],
+                                              grid_and_problem_data['inner_boundary_id'])
     local_problem_boundary_info = make_subdomain_boundary_info(grid, {'type': 'xt.grid.boundaryinfo.allneumann'})
     neighborhood_boundary_info = make_subdomain_boundary_info(
         grid,
@@ -397,13 +397,13 @@ def discretize(grid_and_probem_data):
          'default': 'dirichlet',
          'neumann': '[{} {}]'.format(inner_boundary_id, inner_boundary_id+1)})
 
-    affine_lambda, kappa, f = (grid_and_probem_data['lambda'],
-                               grid_and_probem_data['kappa'],
-                               grid_and_probem_data['f'])
-    lambda_bar, lambda_hat = grid_and_probem_data['lambda_bar'], grid_and_probem_data['lambda_hat']
-    mu_bar, mu_hat, parameter_range  = (grid_and_probem_data['mu_bar'],
-                                        grid_and_probem_data['mu_hat'],
-                                        grid_and_probem_data['parameter_range'])
+    affine_lambda, kappa, f = (grid_and_problem_data['lambda'],
+                               grid_and_problem_data['kappa'],
+                               grid_and_problem_data['f'])
+    lambda_bar, lambda_hat = grid_and_problem_data['lambda_bar'], grid_and_problem_data['lambda_hat']
+    mu_bar, mu_hat, parameter_range  = (grid_and_problem_data['mu_bar'],
+                                        grid_and_problem_data['mu_hat'],
+                                        grid_and_problem_data['parameter_range'])
 
     block_space = make_block_space(grid)
 
