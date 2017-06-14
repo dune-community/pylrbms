@@ -156,12 +156,16 @@ class AdaptiveEnrichment(BasicInterface):
         enrichment_step = 1
         age_count = np.ones(self.block_space.num_blocks)
         local_problem_solves = 0
-        with self.logger.block('solving for mu = {} ...'.format(mu)) as _:
+        rb_size = self.rd.solution_space.dim
+        with self.logger.block('solving {}-dimensional system for mu = {} ...'.format(rb_size, mu)) as _:
             while True:
                 U = self.rd.solve(mu)
                 eta, _, indicators = self.estimate(U, mu=mu, decompose=True)
                 if callback:
-                    callback(self.rd, U, mu, {'eta': eta, 'local_problem_solves': local_problem_solves})
+                    callback(self.rd, U, mu, {'eta': eta,
+                                              'local_problem_solves': local_problem_solves,
+                                              'global RB size': self.rd.solution_space.dim,
+                                              'local RB sizes': [len(rb) for rb in self.reductor.bases]})
                 if eta <= self.target_error:
                     self.logger.info3('estimated error {} below target error of {}, no enrichment required ...'.format(eta, self.target_error))
                     return U, self.rd, self.reductor
@@ -172,4 +176,7 @@ class AdaptiveEnrichment(BasicInterface):
                 enrichment_step += 1
                 self.logger.info3('estimated error {} above target error of {}, enriching ...'.format(eta, self.target_error))
                 local_problem_solves = self._enrich_once(U, mu, indicators, age_count)
+                self.logger.info3('added {} local basis functions due to enrichment'.format(
+                    self.rd.solution_space.dim - rb_size))
+                rb_size = self.rd.solution_space.dim
 
