@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from dune.xt.la import IstlDenseVectorDouble as Vector
+from dune.xt.functions import make_expression_function_1x1
 from dune.gdt import make_discrete_function, project
 
 from pymor.bindings.dunext import DuneXTVector
@@ -9,7 +10,7 @@ from pymor.reductors.system import GenericRBSystemReductor
 from pymor.vectorarrays.list import ListVectorArray
 
 
-def init_local_reduced_bases(d, block_space, order):
+def init_local_reduced_bases(grid, d, block_space, order):
     logger = getLogger('offline.init_local_reduced_bases')
     if order > 1:
         order = 1
