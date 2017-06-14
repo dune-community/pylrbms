@@ -372,10 +372,13 @@ class DuneDiscretization(StationaryDiscretization):
 
     def as_generic_type(self):
         ops = dict(self.operators)
-        del ops['operator']
-        del ops['rhs']
-        del ops['global_op']
-        del ops['global_rhs']
+        for op in ('operator',
+                   'rhs',
+                   'global_op',
+                   'global_rhs'):
+            if op in ops.keys():
+                del ops[op]
+
         return StationaryDiscretization(self.operator, self.rhs, operators=ops, parameter_space=self.parameter_space)
 
     def visualize(self, U, *args, **kwargs):
