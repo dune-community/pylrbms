@@ -4,18 +4,20 @@ from dune.xt.la import IstlDenseVectorDouble as Vector
 from dune.gdt import make_discrete_function, project
 
 from pymor.bindings.dunext import DuneXTVector
+from pymor.core.logger import getLogger
 from pymor.reductors.system import GenericRBSystemReductor
 from pymor.vectorarrays.list import ListVectorArray
 
 
 def init_local_reduced_bases(d, block_space, order):
+    logger = getLogger('offline.init_local_reduced_bases')
     if order > 1:
         order = 1
     U = d.solution_space.empty()
     reductor = GenericRBSystemReductor(d, products=[d.operators['local_energy_dg_product_{}'.format(ii)]
                                                     for ii in range(block_space.num_blocks)])
     if order >= 0:
-        print('initializing local reduced bases with DG shape functions of up to order {} ... '.format(order), end='')
+        logger.info('initializing local reduced bases with DG shape functions of up to order {} ... '.format(order))
 
         # order 0 basis
         for ii in range(block_space.num_blocks):
@@ -33,6 +35,5 @@ def init_local_reduced_bases(d, block_space, order):
                                                             U._blocks[ii].space))
             del tmp_discrete_function
 
-    print('done')
     return reductor
 

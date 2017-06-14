@@ -21,11 +21,13 @@ from dune.xt.grid import (
     make_cube_dd_subdomains_grid__2d_simplex_aluconform as make_grid,
 )
 
+from pymor.core.logger import getLogger
 from pymor.parameters.functionals import ExpressionParameterFunctional
 
 
 def init_grid_and_problem(config):
-    print('initializing grid and problem ... ', end='', flush=True)
+    logger = getLogger('OS2015_academic_problem.OS2015_academic_problem')
+    logger.info('initializing grid and problem ... ')
 
     lower_left = [-1, -1]
     upper_right = [1, 1]
@@ -53,8 +55,6 @@ def init_grid_and_problem(config):
     f = make_expression_function_1x1(grid, 'x', '0.5*pi*pi*cos(0.5*pi*x[0])*cos(0.5*pi*x[1])', order=2, name='f')
     lambda_bar = make_constant_function_1x1(grid, 1., name='lambda_bar')
     lambda_hat = make_constant_function_1x1(grid, 1., name='lambda_hat')
-
-    print('done')
 
     return {'grid': grid,
             'boundary_info': all_dirichlet_boundary_info,
