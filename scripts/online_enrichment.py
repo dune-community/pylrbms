@@ -4,7 +4,7 @@
 import numpy as np
 
 from dune.xt.la import IstlDenseVectorDouble as Vector
-
+from dune.xt.grid import make_boundary_info_on_dd_subdomain_layer as make_subdomain_boundary_info
 from dune.gdt import (
     RS2017_make_elliptic_swipdg_matrix_operator_on_neighborhood as make_elliptic_swipdg_matrix_operator_on_neighborhood,
     RS2017_make_elliptic_swipdg_vector_functional_on_neighborhood
@@ -106,12 +106,13 @@ def solve_for_local_correction(grid, subdomain, local_boundary_info, affine_lamb
 
 class AdaptiveEnrichment(BasicInterface):
 
-    def __init__(self, grid_and_problem_data, discretization, block_space, local_boundary_info, reductor, rd,
+    def __init__(self, grid_and_problem_data, discretization, block_space, reductor, rd,
             target_error, marking_doerfler_theta, marking_max_age):
         self.grid_and_problem_data = grid_and_problem_data
         self.discretization = discretization
         self.block_space = block_space
-        self.local_boundary_info = local_boundary_info
+        self.local_boundary_info = make_subdomain_boundary_info(self.grid_and_problem_data['grid'],
+                                                                {'type': 'xt.grid.boundaryinfo.alldirichlet'})
         self.reductor = reductor
         self.rd = rd
         self.target_error = target_error
