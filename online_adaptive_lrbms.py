@@ -43,6 +43,16 @@ grid = grid_and_problem_data['grid']
 # grid.visualize('local_thermalblock_problem_grid', False)
 
 
+class FakeEstimator(object):
+
+    def __init__(self, disc, reductor):
+        self.disc = disc
+        self.reductor = reductor
+
+    def estimate(self, U, mu, discretization, decompose=False):
+        return self.disc.estimate(self.reductor.reconstruct(U), mu=mu, decompose=decompose)
+
+
 d, block_space, _ = discretize(grid_and_problem_data)
 d.disable_logging()
 
@@ -59,7 +69,18 @@ d.disable_logging()
 #     errors.append(estimate)
 # logger.info('')
 
-reductor = init_local_reduced_bases(grid, d, block_space, config['initial_RB_order'])
+stripped_d = d.with_(operators={name: op
+                                for name, op in d.operators.items() if (
+                                    name != 'operator'
+                                    and name != 'rhs'
+                                    and name[:3] != 'nc_'
+                                    and name[:1] != 'r'
+                                    and name[:3] != 'df_'
+                                    and name[:7] != 'global_')})
+
+reductor = init_local_reduced_bases(grid, stripped_d, block_space, config['initial_RB_order'])
+
+stripped_d = stripped_d.with_(estimator=FakeEstimator(d, reductor))
 
 # logger.info('adding some global solution snapshots to reduced basis ...')
 # for mu in (grid_and_problem_data['mu_min'], grid_and_problem_data['mu_max']):
@@ -72,7 +93,7 @@ logger.info('')
 
 with logger.block('reducing ...') as _:
     rd = reductor.reduce()
-    rd = rd.with_(estimator=d.estimator)
+    rd = rd.with_(estimator=stripped_d.estimator)
 logger.info('')
 
 with logger.block('estimating some reduced errors:') as _:
@@ -86,9 +107,8 @@ with logger.block('estimating some reduced errors:') as _:
         reduced_errors.append(estimate)
 logger.info('')
 
-
 logger.info('online phase:')
-online_adaptive_LRBMS = AdaptiveEnrichment(grid_and_problem_data, d, block_space,
+online_adaptive_LRBMS = AdaptiveEnrichment(grid_and_problem_data, stripped_d, block_space,
                                            reductor, rd, config['enrichment_target_error'],
                                            config['marking_doerfler_theta'],
                                            config['marking_max_age'])

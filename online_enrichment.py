@@ -138,8 +138,10 @@ class AdaptiveEnrichment(BasicInterface):
                     self.discretization, self.block_space, self.reductor, U, mu)
             new_reductor.extend_basis_local(local_correction)
         self.reductor = new_reductor
+        estimator = self.discretization.estimator
+        estimator.reductor = self.reductor
         self.rd = self.reductor.reduce()
-        self.rd = self.rd.with_(estimator=self.discretization.estimator)
+        self.rd = self.rd.with_(estimator=estimator)
         # clear age count
         for ii in range(self.block_space.num_blocks):
             if ii in marked_subdomains:
