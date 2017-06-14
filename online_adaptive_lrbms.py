@@ -88,7 +88,7 @@ logger.info('')
 
 
 logger.info('online phase:')
-online_adaptive_LRBMS = AdaptiveEnrichment(grid_and_problem_data, d, block_space, local_boundary_info,
+online_adaptive_LRBMS = AdaptiveEnrichment(grid_and_problem_data, d, block_space,
                                            reductor, rd, config['enrichment_target_error'],
                                            config['marking_doerfler_theta'],
                                            config['marking_max_age'])
