@@ -12,11 +12,11 @@ set_log_levels({'online_adaptive_lrbms': 'DEBUG',
                 'offline': 'INFO',
                 'online_enrichment': 'INFO'})
 logger = getLogger('online_adaptive_lrbms.online_adaptive_lrbms')
+from pymor.discretizations.basic import StationaryDiscretization
 
-from OS2015_academic_problem import (
-    make_expression_function_1x1,
-    init_grid_and_problem,
-)
+from OS2015_academic_problem import init_grid_and_problem
+# from local_thermalblock_problem import init_grid_and_problem
+
 from discretize_elliptic import (
     Vector,
     discretize,
@@ -32,28 +32,31 @@ config = {'num_coarse_grid_elements': [4, 4],
           'num_grid_refinements': 2,
           'num_grid_subdomains': [2, 2],
           'num_grid_oversampling_layers': 4, # num_grid_oversampling_layers has to exactly cover one subdomain!
-          'initial_RB_order': 0,
-          'enrichment_target_error': 1., # ([4, 4], 2, [2, 2]): 0.815510144764 | ([4, 4], 6, [8, 8]): 2.25996532203
-          'marking_doerfler_theta': 0.33, # ([4, 4], 6, [4, 4]): 0.160346202936
-          'marking_max_age': 2}
+          'initial_RB_order': 1,
+          'enrichment_target_error': 0.3, # ([4, 4], 2, [2, 2]): 0.815510144764 | ([4, 4], 6, [8, 8]): 2.25996532203
+          'marking_doerfler_theta': 0.8, # ([4, 4], 6, [4, 4]): 0.160346202936
+          'marking_max_age': 2} # ([6, 6], 2, [3, 3], 4): 0.28154229174
 
 
 grid_and_problem_data = init_grid_and_problem(config)
 grid = grid_and_problem_data['grid']
-# grid.visualize('grid', False)
+# grid.visualize('local_thermalblock_problem_grid', False)
 
-d, block_space, local_boundary_info = discretize(grid_and_problem_data)
+
+d, block_space, _ = discretize(grid_and_problem_data)
+d.disable_logging()
 
 # logger.info('estimating some errors:')
 # errors = []
-# for mu in (grid_and_problem_data['mu_min'], grid_and_problem_data['mu_max']):
+# for mu in np.linspace(grid_and_problem_data['parameter_range'][0],
+#                       grid_and_problem_data['parameter_range'][1],
+#                       3):
 #     mu = d.parse_parameter(mu)
-#     logger.info('  {}: '.format(mu), end='', flush=True)
+#     print('  {}: '.format(mu), end='', flush=True)
 #     U = d.solve(mu)
 #     estimate = d.estimate(U, mu=mu)
-#     logger.info(estimate)
+#     print(estimate)
 #     errors.append(estimate)
-
 # logger.info('')
 
 reductor = init_local_reduced_bases(grid, d, block_space, config['initial_RB_order'])
