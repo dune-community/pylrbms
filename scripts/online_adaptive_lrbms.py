@@ -56,7 +56,7 @@ d, block_space, local_boundary_info = discretize(grid_and_problem_data)
 
 # logger.info('')
 
-reductor = init_local_reduced_bases(d, block_space, config['initial_RB_order'])
+reductor = init_local_reduced_bases(grid, d, block_space, config['initial_RB_order'])
 
 # logger.info('adding some global solution snapshots to reduced basis ...')
 # for mu in (grid_and_problem_data['mu_min'], grid_and_problem_data['mu_max']):
