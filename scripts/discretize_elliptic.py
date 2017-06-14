@@ -34,6 +34,7 @@ from pymor.bindings.dunegdt import DuneGDTVisualizer
 from pymor.bindings.dunext import DuneXTMatrixOperator
 from pymor.core.exceptions import ExtensionError
 from pymor.core.interfaces import ImmutableInterface
+from pymor.core.logger import getLogger
 from pymor.operators.basic import OperatorBase
 from pymor.operators.block import BlockOperator
 from pymor.parameters.functionals import ProductParameterFunctional
@@ -385,7 +386,8 @@ class DuneDiscretization(StationaryDiscretization):
 
 
 def discretize(grid_and_problem_data):
-    print('discretizing ... ', end='', flush=True)
+    logger = getLogger('discretize_elliptic.discretize_block_SWIPDG')
+    logger.info('discretizing ... ')
 
     grid, boundary_info, inner_boundary_id = (grid_and_problem_data['grid'],
                                               grid_and_problem_data['boundary_info'],
@@ -680,6 +682,5 @@ def discretize(grid_and_problem_data):
                            operators=operators, estimator=estimator)
     d = d.with_(parameter_space=CubicParameterSpace(d.parameter_type, parameter_range[0], parameter_range[1]))
 
-    print('done')
     return d, block_space, neighborhood_boundary_info
 
