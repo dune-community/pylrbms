@@ -107,7 +107,7 @@ def solve_for_local_correction(grid, subdomain, local_boundary_info, affine_lamb
 class AdaptiveEnrichment(BasicInterface):
 
     def __init__(self, grid_and_problem_data, discretization, block_space, reductor, rd,
-            target_error, marking_doerfler_theta, marking_max_age):
+            target_error, marking_doerfler_theta, marking_max_age, fake_estimator=None):
         self.grid_and_problem_data = grid_and_problem_data
         self.discretization = discretization
         self.block_space = block_space
@@ -118,6 +118,7 @@ class AdaptiveEnrichment(BasicInterface):
         self.target_error = target_error
         self.marking_doerfler_theta = marking_doerfler_theta
         self.marking_max_age = marking_max_age
+        self.fake_estimator = fake_estimator
 
     def _enrich_once(self, U, mu, indicators, age_count):
         marked_subdomains = set(doerfler_marking(indicators, self.marking_doerfler_theta))
@@ -138,8 +139,11 @@ class AdaptiveEnrichment(BasicInterface):
                     self.discretization, self.block_space, self.reductor, U, mu)
             new_reductor.extend_basis_local(local_correction)
         self.reductor = new_reductor
-        estimator = self.discretization.estimator
-        estimator.reductor = self.reductor
+        if self.fake_estimator:
+            estimator = self.fake_estimator
+            estimator.reductor = self.reductor
+        else:
+            estimator = self.discretization.estimator
         self.rd = self.reductor.reduce()
         self.rd = self.rd.with_(estimator=estimator)
         # clear age count
@@ -178,7 +182,7 @@ class AdaptiveEnrichment(BasicInterface):
                 enrichment_step += 1
                 self.logger.info3('estimated error {} above target error of {}, enriching ...'.format(eta, self.target_error))
                 local_problem_solves = self._enrich_once(U, mu, indicators, age_count)
-                self.logger.info3('added {} local basis functions due to enrichment'.format(
-                    self.rd.solution_space.dim - rb_size))
+                self.logger.info3('added {} local basis functions, system size increase: {} --> {}'.format(
+                    self.rd.solution_space.dim - rb_size, rb_size, self.rd.solution_space.dim))
                 rb_size = self.rd.solution_space.dim
 
