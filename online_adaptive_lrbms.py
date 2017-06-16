@@ -69,6 +69,7 @@ d.disable_logging()
 #     errors.append(estimate)
 # logger.info('')
 
+
 stripped_d = d.with_(operators={name: op
                                 for name, op in d.operators.items() if (
                                     name != 'operator'
@@ -80,7 +81,8 @@ stripped_d = d.with_(operators={name: op
 
 reductor = init_local_reduced_bases(grid, stripped_d, block_space, config['initial_RB_order'])
 
-stripped_d = stripped_d.with_(estimator=FakeEstimator(d, reductor))
+estimator = FakeEstimator(d, reductor)
+stripped_d = stripped_d.with_(estimator=estimator)
 
 # logger.info('adding some global solution snapshots to reduced basis ...')
 # for mu in (grid_and_problem_data['mu_min'], grid_and_problem_data['mu_max']):
@@ -111,7 +113,7 @@ logger.info('online phase:')
 online_adaptive_LRBMS = AdaptiveEnrichment(grid_and_problem_data, stripped_d, block_space,
                                            reductor, rd, config['enrichment_target_error'],
                                            config['marking_doerfler_theta'],
-                                           config['marking_max_age'])
+                                           config['marking_max_age'], fake_estimator=estimator)
 for mu in rd.parameter_space.sample_randomly(20):
     U, _, _ = online_adaptive_LRBMS.solve(mu)
 
