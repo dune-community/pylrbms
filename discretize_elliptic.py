@@ -685,5 +685,5 @@ def discretize(grid_and_problem_data):
                            operators=operators, estimator=estimator)
     d = d.with_(parameter_space=CubicParameterSpace(d.parameter_type, parameter_range[0], parameter_range[1]))
 
-    return d, block_space, neighborhood_boundary_info
+    return d, block_space
 
