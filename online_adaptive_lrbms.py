@@ -27,31 +27,30 @@ from offline import init_local_reduced_bases
 
 from online_enrichment import AdaptiveEnrichment
 
+# max discretization error, to derive enrichment_target_error
+# ===========================================================
+# OS2015_academic_problem
+# [4, 4], 2, [2, 2], 4: 0.815510144764
+# [6, 6], 4, [6, 6], 4: 3.03372753518
+
+# local_thermalblock_problem
+# [6, 6], 4, [6, 6], 4: 0.585792065793
+# ===========================================================
 
 config = {'num_coarse_grid_elements': [4, 4],
           'num_grid_refinements': 2,
           'num_grid_subdomains': [2, 2],
           'num_grid_oversampling_layers': 4, # num_grid_oversampling_layers has to exactly cover one subdomain!
-          'initial_RB_order': 1,
-          'enrichment_target_error': 0.3, # ([4, 4], 2, [2, 2]): 0.815510144764 | ([4, 4], 6, [8, 8]): 2.25996532203
-          'marking_doerfler_theta': 0.8, # ([4, 4], 6, [4, 4]): 0.160346202936
-          'marking_max_age': 2} # ([6, 6], 2, [3, 3], 4): 0.28154229174
+          'initial_RB_order': 0,
+          'enrichment_target_error': 1.,
+          'fake_estimator': False,
+          'marking_doerfler_theta': 0.8,
+          'marking_max_age': 2}
 
 
 grid_and_problem_data = init_grid_and_problem(config)
 grid = grid_and_problem_data['grid']
-# grid.visualize('local_thermalblock_problem_grid', False)
-
-
-class FakeEstimator(object):
-
-    def __init__(self, disc, reductor):
-        self.disc = disc
-        self.reductor = reductor
-
-    def estimate(self, U, mu, discretization, decompose=False):
-        return self.disc.estimate(self.reductor.reconstruct(U), mu=mu, decompose=decompose)
-
+# grid.visualize('grid', False)
 
 d, block_space, _ = discretize(grid_and_problem_data)
 d.disable_logging()
@@ -70,53 +69,76 @@ d.disable_logging()
 # logger.info('')
 
 
-stripped_d = d.with_(operators={name: op
-                                for name, op in d.operators.items() if (
-                                    name != 'operator'
-                                    and name != 'rhs'
-                                    and name[:3] != 'nc_'
-                                    and name[:1] != 'r'
-                                    and name[:3] != 'df_'
-                                    and name[:7] != 'global_')})
+# The estimator: either we
+#  (i)  use the offline/online decomposable estimator (large offline computational effort, instant online estimation); or we
+#  (ii) use the high-dimensional estimator (no offline effort, medium online effort).
 
-reductor = init_local_reduced_bases(grid, stripped_d, block_space, config['initial_RB_order'])
+if config['fake_estimator']:
 
-estimator = FakeEstimator(d, reductor)
-stripped_d = stripped_d.with_(estimator=estimator)
+    class FakeEstimator(object):
+
+        def __init__(self, disc, reductor):
+            self.disc = disc
+            self.reductor = reductor
+
+        def estimate(self, U, mu, discretization, decompose=False):
+            return self.disc.estimate(self.reductor.reconstruct(U), mu=mu, decompose=decompose)
+
+    LRBMS_d = d.with_(operators={name: op
+                                 for name, op in d.operators.items() if (
+                                     name != 'operator'
+                                     and name != 'rhs'
+                                     and name[:3] != 'nc_'
+                                     and name[:1] != 'r'
+                                     and name[:3] != 'df_'
+                                     and name[:7] != 'global_')})
+
+    reductor = init_local_reduced_bases(grid, LRBMS_d, block_space, config['initial_RB_order'])
+
+    LRBMS_d = LRBMS_d.with_(estimator=FakeEstimator(d, reductor))
+
+else:
+
+    LRBMS_d = d
+    reductor = init_local_reduced_bases(grid, LRBMS_d, block_space, config['initial_RB_order'])
+
 
 # logger.info('adding some global solution snapshots to reduced basis ...')
 # for mu in (grid_and_problem_data['mu_min'], grid_and_problem_data['mu_max']):
-#     U = d.solve(mu)
+#     U = LRBMS_d.solve(mu)
 #     try:
 #         reductor.extend_basis(U)
 #     except ExtensionError:
 #         pass
-logger.info('')
+# logger.info('')
+
 
 with logger.block('reducing ...') as _:
     rd = reductor.reduce()
-    rd = rd.with_(estimator=stripped_d.estimator)
+    rd = rd.with_(estimator=LRBMS_d.estimator)
 logger.info('')
 
 with logger.block('estimating some reduced errors:') as _:
-    reduced_errors = []
     for mu in (grid_and_problem_data['mu_min'], grid_and_problem_data['mu_max']):
-        mu = d.parse_parameter(mu)
+        mu = rd.parse_parameter(mu)
         logger.info('{} ... '.format(mu))
         U = rd.solve(mu)
         estimate = rd.estimate(U, mu=mu)
         logger.info('    {}'.format(estimate))
-        reduced_errors.append(estimate)
 logger.info('')
 
 logger.info('online phase:')
-online_adaptive_LRBMS = AdaptiveEnrichment(grid_and_problem_data, stripped_d, block_space,
+online_adaptive_LRBMS = AdaptiveEnrichment(grid_and_problem_data, LRBMS_d, block_space,
                                            reductor, rd, config['enrichment_target_error'],
                                            config['marking_doerfler_theta'],
-                                           config['marking_max_age'], fake_estimator=estimator)
+                                           config['marking_max_age'],
+                                           fake_estimator=LRBMS_d.estimator if config['fake_estimator'] else None)
 for mu in rd.parameter_space.sample_randomly(20):
     U, _, _ = online_adaptive_LRBMS.solve(mu)
 
 logger.info('')
+logger.info('local basis sizes:')
+for name, basis in online_adaptive_LRBMS.reductor.bases.items():
+    logger.info('{}: {}'.format(name, len(basis)))
 logger.info('finished')
 
