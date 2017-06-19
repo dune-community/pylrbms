@@ -3,10 +3,10 @@
 import numpy as np
 
 from pymor.core.exceptions import ExtensionError
-from pymor.reductors.system import GenericRBSystemReductor
 
 from thermalblock_problem import init_grid_and_problem
 from discretize_elliptic import discretize
+from offline import init_local_reduced_bases
 
 
 config = {'num_coarse_grid_elements': [4, 4],
@@ -34,8 +34,8 @@ print('  residual indicator:       {} (should be 2.89e-01)'.format(np.linalg.nor
 print('  diffusive flux indicator: {} (should be 3.55e-01)'.format(np.linalg.norm(local_eta_df)))
 print('  estimated error:          {}'.format(eta))
 
+reductor = init_local_reduced_bases(grid, d, block_space, 0)
 U = d.solution_space.empty()
-reductor = GenericRBSystemReductor(d)
 for mu in d.parameter_space.sample_uniformly(2):
     snapshot = d.solve(mu)
     U.append(snapshot)
@@ -43,7 +43,7 @@ for mu in d.parameter_space.sample_uniformly(2):
         reductor.extend_basis(snapshot)
     except ExtensionError:
         pass
-d.visualize(U, filename='U')
+# d.visualize(U, filename='U')
 rd = reductor.reduce()
 
 u = rd.solution_space.empty()
