@@ -50,6 +50,7 @@ def init_grid_and_problem(config):
     diffusion_functions = [diffusion_function_factory(ix, iy)
                            for ix, iy in product(range(XBLOCKS), range(YBLOCKS))]
 
+    parameter_type = {'diffusion': (YBLOCKS, XBLOCKS)}
     coefficients = [ProjectionParameterFunctional(component_name='diffusion',
                                                   component_shape=(YBLOCKS, XBLOCKS),
                                                   coordinates=(YBLOCKS - y - 1, x))
@@ -71,6 +72,7 @@ def init_grid_and_problem(config):
             'lambda_hat': lambda_hat,
             'kappa': kappa,
             'f': f,
+            'parameter_type': parameter_type,
             'mu_bar': (1, 1, 1, 1),
             'mu_hat': (1, 1, 1, 1),
             'mu_min': (0.1, 0.1, 0.1, 0.1),

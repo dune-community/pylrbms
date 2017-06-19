@@ -16,15 +16,8 @@ from pymor.discretizations.basic import StationaryDiscretization
 
 from OS2015_academic_problem import init_grid_and_problem
 # from local_thermalblock_problem import init_grid_and_problem
-
-from discretize_elliptic import (
-    Vector,
-    discretize,
-    make_discrete_function,
-)
-
+from discretize_elliptic import discretize
 from offline import init_local_reduced_bases
-
 from online_enrichment import AdaptiveEnrichment
 
 # max discretization error, to derive enrichment_target_error
