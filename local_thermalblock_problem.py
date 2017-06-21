@@ -31,7 +31,7 @@ def init_grid_and_problem(config):
     logger = getLogger('local_thermalblock_problem.local_thermalblock_problem')
     logger.info('initializing grid and problem ... ')
 
-    lower_left = [0, 0]
+    lower_left = [-1, -1]
     upper_right = [1, 1]
     inner_boundary_id = 18446744073709551573
     grid = make_grid(lower_left=lower_left,
