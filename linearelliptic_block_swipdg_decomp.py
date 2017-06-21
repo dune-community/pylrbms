@@ -31,12 +31,12 @@ U = d.solve(mu)
 print('estimating error ', end='', flush=True)
 
 eta, (local_eta_nc, local_eta_r, local_eta_df), _ = d.estimate(U, mu=mu, decompose=True)
-print(*enumerate(local_eta_nc))
+# print(*enumerate(local_eta_nc))
 
 print('')
-print('  nonconformity indicator:  {} (should be 1.66e-01)'.format(np.linalg.norm(local_eta_nc)))
-print('  residual indicator:       {} (should be 2.89e-01)'.format(np.linalg.norm(local_eta_r)))
-print('  diffusive flux indicator: {} (should be 3.55e-01)'.format(np.linalg.norm(local_eta_df)))
+print('  nonconformity indicator:  {} (should be 3.91e-02)'.format(np.linalg.norm(local_eta_nc)))
+print('  residual indicator:       {} (should be 1.82e-02)'.format(np.linalg.norm(local_eta_r)))
+print('  diffusive flux indicator: {} (should be 8.73e-02)'.format(np.linalg.norm(local_eta_df)))
 print('  estimated error:          {}'.format(eta))
 
 reductor = LRBMSReductor(d, products=[d.operators['local_energy_dg_product_{}'.format(ii)]
@@ -65,7 +65,7 @@ print('estimating reduced error ', end='', flush=True)
 eta, (local_eta_nc, local_eta_r, local_eta_df), _ = rd.estimate(u, mu=mu, decompose=True)
 
 print('')
-print('  nonconformity indicator:  {} (should be 1.74598)'.format(np.linalg.norm(local_eta_nc)))
-print('  residual indicator:       {} (should be 0.28939)'.format(np.linalg.norm(local_eta_r)))
-print('  diffusive flux indicator: {} (should be 0.50916)'.format(np.linalg.norm(local_eta_df)))
+print('  nonconformity indicator:  {} (should be 3.91e-02)'.format(np.linalg.norm(local_eta_nc)))
+print('  residual indicator:       {} (should be 1.82e-02)'.format(np.linalg.norm(local_eta_r)))
+print('  diffusive flux indicator: {} (should be 8.73e-02)'.format(np.linalg.norm(local_eta_df)))
 print('  estimated error:          {}'.format(eta))
