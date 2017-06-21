@@ -135,7 +135,7 @@ class FluxReconstructionOperator(EstimatorOperatorBase):
             self.block_space.project_onto_neighborhood(
                 [U._list[0].impl if nn == ss else Vector(self.block_space.local_space(nn).size(), 0.)
                  for nn in range(self.grid.num_subdomains)],
-                set([nn for nn in range(self.grid.num_subdomains)])
+                [nn for nn in range(self.grid.num_subdomains)]
             )
         )
 
