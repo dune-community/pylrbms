@@ -15,6 +15,18 @@ class LRBMSReductor(GenericRBSystemReductor):
     def _reduce(self):
         d = self.d
 
+        self.logger.info('Computing oswald interpolations ...')
+        oi = d.estimator.oswald_interpolation_error
+
+        oi_red = []
+        for i, OI_i_space in enumerate(oi.range.subspaces):
+            oi_i = oi._blocks[i, i]
+            basis = self.bases[oi_i.source.id]
+            self.bases[OI_i_space.id] = oi_i.apply(basis)
+            oi_red.append(NumpyMatrixOperator(np.eye(len(basis)),
+                                              source_id=oi_i.source.id, range_id=oi_i.range.id))
+        oi_red = unblock(BlockDiagonalOperator(oi_red))
+
         self.logger.info('Computing flux reconstructions ...')
         fr = d.estimator.flux_reconstruction
 
@@ -35,7 +47,7 @@ class LRBMSReductor(GenericRBSystemReductor):
         fr_red = LincombOperator(red_aff_components, fr.coefficients)
         fr_red = unblock(fr_red)
 
-        red_estimator = d.estimator.with_(flux_reconstruction=fr_red)
+        red_estimator = d.estimator.with_(flux_reconstruction=fr_red, oswald_interpolation_error=oi_red)
 
         rd = super()._reduce()
         rd = rd.with_(estimator=red_estimator)

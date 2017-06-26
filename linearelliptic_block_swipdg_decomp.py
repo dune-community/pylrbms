@@ -10,6 +10,10 @@ from discretize_elliptic import discretize
 from offline import init_local_reduced_bases
 from lrbms import LRBMSReductor
 
+from pymor.core.logger import set_log_levels
+set_log_levels({'discretize_elliptic': 'INFO',
+                'lrbms': 'INFO'})
+
 
 config = {'num_coarse_grid_elements': [4, 4],
           'num_grid_refinements': 6,

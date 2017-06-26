@@ -18,6 +18,7 @@ from dune.gdt import (
     RS2017_make_penalty_product_matrix_operator_on_subdomain as make_penalty_product_matrix_operator,
     RS2017_residual_indicator_min_diffusion_eigenvalue as min_diffusion_eigenvalue,
     RS2017_residual_indicator_subdomain_diameter as subdomain_diameter,
+    RS2017_make_elliptic_matrix_operator_on_subdomain as make_local_elliptic_matrix_operator,
     make_block_dg_dd_subdomain_part_to_1x1_fem_p1_space as make_block_space,
     make_discrete_function,
     make_elliptic_matrix_operator_istl_row_major_sparse_matrix_double as make_elliptic_matrix_operator,
@@ -39,7 +40,7 @@ from pymor.operators.basic import OperatorBase
 from pymor.operators.block import BlockOperator, BlockDiagonalOperator
 from pymor.parameters.functionals import ProductParameterFunctional
 from pymor.reductors.system import GenericRBSystemReductor
-from pymor.vectorarrays.block import BlockVectorArray
+from pymor.vectorarrays.block import BlockVectorSpace
 
 
 def alpha(thetas, mu, mu_bar):
@@ -104,6 +105,55 @@ class EstimatorOperatorBase(OperatorBase):
         return result
 
 
+class OswaldInterpolationErrorOperator(EstimatorOperatorBase):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        assert self.subdomain == self.kk == self.jj
+        self.range = BlockVectorSpace([self.global_space.subspaces[ii] for ii in self.neighborhood],
+                                      'OI_{}'.format(self.subdomain))
+
+    def _apply(self, U, mu=None):
+        from dune.gdt import apply_oswald_interpolation_operator
+
+        assert len(U) == 1
+        assert U in self.source
+
+        result = self.range.zeros()
+        result._blocks[self.neighborhood.index(self.subdomain)].axpy(1, U)
+
+        for i_ii, ii in enumerate(self.neighborhood):
+            ii_neighborhood = self.grid.neighborhood_of(ii)
+            ii_neighborhood_space = self.block_space.restricted_to_neighborhood(ii_neighborhood)
+
+            subdomain_uh_with_neighborhood_support = make_discrete_function(
+                ii_neighborhood_space,
+                ii_neighborhood_space.project_onto_neighborhood(
+                    [U._list[0].impl if nn == self.subdomain else Vector(self.block_space.local_space(nn).size(), 0.)
+                     for nn in ii_neighborhood],
+                    ii_neighborhood
+                )
+            )
+
+            interpolated_u_vector = ii_neighborhood_space.project_onto_neighborhood(
+                [Vector(self.block_space.local_space(nn).size(), 0.) for nn in ii_neighborhood], ii_neighborhood)
+            interpolated_u = make_discrete_function(ii_neighborhood_space, interpolated_u_vector)
+
+            apply_oswald_interpolation_operator(
+                self.grid, ii,
+                make_subdomain_boundary_info(self.grid, {'type': 'xt.grid.boundaryinfo.alldirichlet'}),
+                subdomain_uh_with_neighborhood_support,
+                interpolated_u
+            )
+
+            local_sizes = np.array([ii_neighborhood_space.local_space(nn).size() for nn in ii_neighborhood])
+            offsets = np.hstack(([0], np.cumsum(local_sizes)))
+            ind = ii_neighborhood.index(ii)
+            result._blocks[i_ii]._list[0].data[:] -= np.frombuffer(interpolated_u_vector)[offsets[ind]:offsets[ind+1]]
+
+        return result
+
+
 class FluxReconstructionOperator(EstimatorOperatorBase):
 
     RT_range = True
@@ -140,39 +190,35 @@ class FluxReconstructionOperator(EstimatorOperatorBase):
         )
 
 
-class NonconformatyOperator(EstimatorOperatorBase):
+class NonconformityOperator(EstimatorOperatorBase):
+
+    _matrices = {}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.range = BlockVectorSpace([self.global_space.subspaces[ii] for ii in self.grid.neighborhood_of(self.jj)],
+                                      'OI_{}'.format(self.jj))
+        self.source = BlockVectorSpace([self.global_space.subspaces[ii] for ii in self.grid.neighborhood_of(self.kk)],
+                                       'OI_{}'.format(self.kk))
+        if self.subdomain not in self._matrices:
+            matrix = make_local_elliptic_matrix_operator(self.grid, self.subdomain,
+                                                         self.block_space.local_space(self.subdomain),
+                                                         self.lambda_bar, self.kappa)
+            matrix.assemble()
+            matrix = matrix.matrix()
+            self._matrices[self.subdomain] = DuneXTMatrixOperator(matrix,
+                                                                  range_id='domain_{}'.format(self.subdomain),
+                                                                  source_id='domain_{}'.format(self.subdomain))
+        self.matrix = self._matrices[self.subdomain]
+        self.range_index = self.grid.neighborhood_of(self.jj).index(self.subdomain)
+        self.source_index = self.grid.neighborhood_of(self.kk).index(self.subdomain)
 
     def apply(self, U, mu=None):
         raise NotImplementedError
 
-    def _apply2(self, V, U, mu=None):
-        from dune.gdt import make_ESV2007_nonconformity_product_dd_subdomain_part_dd_subdomain_oversampled_part \
-            as make_local_nonconformity_product
-
-        assert len(V) == 1 and len(U) == 1
+    def apply2(self, V, U, mu=None):
         assert V in self.range and U in self.source
-
-        subdomain_vh_with_neighborhood_support = self.localize_to_subdomain_with_neighborhood_support(V, self.jj)
-        subdomain_uh_with_neighborhood_support = self.localize_to_subdomain_with_neighborhood_support(U, self.kk)
-        local_eta_nc_squared = make_local_nonconformity_product(
-            self.grid, self.subdomain, self.subdomain, self.neighborhood_boundary_info,
-            self.lambda_bar, self.kappa,
-            subdomain_vh_with_neighborhood_support,
-            subdomain_uh_with_neighborhood_support,
-            over_integrate=2).apply2()
-        return np.array([[local_eta_nc_squared]])
-
-    def localize_to_subdomain_with_neighborhood_support(self, U, ss):
-        assert len(U) == 1
-
-        neighborhood_space = self.block_space.restricted_to_neighborhood(self.neighborhood)
-
-        return make_discrete_function(
-            neighborhood_space,
-            neighborhood_space.project_onto_neighborhood(
-                [U._list[0].impl if nn == ss else Vector(self.block_space.local_space(nn).size(), 0.)
-                 for nn in self.neighborhood],
-                self.neighborhood))
+        return self.matrix.apply2(V._blocks[self.range_index], U._blocks[self.source_index])
 
 
 class ResidualPartOperator(EstimatorOperatorBase):
@@ -319,7 +365,7 @@ class DiffusiveFluxOperatorAB(EstimatorOperatorBase):
 class Estimator(ImmutableInterface):
 
     def __init__(self, min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs, mu_bar, mu_hat,
-                 flux_reconstruction):
+                 flux_reconstruction, oswald_interpolation_error):
         self.min_diffusion_evs = min_diffusion_evs
         self.subdomain_diameters = subdomain_diameters
         self.local_eta_rf_squared = local_eta_rf_squared
@@ -327,6 +373,7 @@ class Estimator(ImmutableInterface):
         self.mu_bar = mu_bar
         self.mu_hat = mu_hat
         self.flux_reconstruction = flux_reconstruction
+        self.oswald_interpolation_error = oswald_interpolation_error
         self.num_subdomains = len(subdomain_diameters)
 
     def estimate(self, U, mu, discretization, decompose=False):
@@ -341,13 +388,13 @@ class Estimator(ImmutableInterface):
         local_eta_df = np.zeros(self.num_subdomains)
 
         U_r = self.flux_reconstruction.apply(U, mu=mu)
+        U_o = self.oswald_interpolation_error.apply(U)
 
         for ii in range(self.num_subdomains):
-            local_eta_nc[ii] = d.operators['nc_{}'.format(ii)].apply2(U, U, mu=mu)
+            local_eta_nc[ii] = d.operators['nc_{}'.format(ii)].apply2(U_o, U_o, mu=mu)
             local_eta_r[ii] += self.local_eta_rf_squared[ii]
             local_eta_r[ii] -= 2*d.operators['r1_{}'.format(ii)].apply(U_r, mu=mu).data
             local_eta_r[ii] += d.operators['r2_{}'.format(ii)].apply2(U_r, U_r, mu=mu)
-            # local_eta_df[ii] += d.operators['df_{}'.format(ii)].apply2(U, U, mu=mu)
             local_eta_df[ii] += d.operators['df_aa_{}'.format(ii)].apply2(U, U, mu=mu)
             local_eta_df[ii] += d.operators['df_bb_{}'.format(ii)].apply2(U_r, U_r, mu=mu)
             local_eta_df[ii] += 2*d.operators['df_ab_{}'.format(ii)].apply2(U, U_r, mu=mu)
@@ -613,6 +660,15 @@ def discretize(grid_and_problem_data):
     operators = {'global_op': op, 'global_rhs': rhs}
     global_rt_space = make_rt_space(grid)
 
+    def assemble_oswald_interpolation_error():
+        oi_ops = [OswaldInterpolationErrorOperator(ii, ii, ii, block_op.source, grid, block_space,
+                                                   global_rt_space, neighborhood_boundary_info,
+                                                   None, None, None, None)
+                  for ii in range(grid.num_subdomains)]
+        return BlockDiagonalOperator(oi_ops, name='oswald_interpolation_error')
+
+    oi_op = assemble_oswald_interpolation_error()
+
     def assemble_flux_reconstruction(lambda_xi):
         fr_ops = [FluxReconstructionOperator(ii, ii, ii, block_op.source, grid, block_space,
                                              global_rt_space, neighborhood_boundary_info,
@@ -667,10 +723,11 @@ def discretize(grid_and_problem_data):
             nc_ops = np.full((grid.num_subdomains,) * 2, None)
             for jj in neighborhood:
                 for kk in neighborhood:
-                    nc_ops[jj, kk] = NonconformatyOperator(ii, jj, kk, block_op.source, grid, block_space,
+                    nc_ops[jj, kk] = NonconformityOperator(ii, jj, kk, block_op.source, grid, block_space,
                                                            global_rt_space, neighborhood_boundary_info,
                                                            lambda_bar, None, None, kappa)
-            return BlockOperator(nc_ops, range_spaces=spaces, source_spaces=spaces, name='nonconformity_{}'.format(ii))
+            return BlockOperator(nc_ops, range_spaces=oi_op.range.subspaces, source_spaces=oi_op.range.subspaces,
+                                 name='nonconformity_{}'.format(ii))
 
         def assemble_estimator_diffusive_flux_aa(lambda_xi, lambda_xi_prime):
             df_ops = np.full((grid.num_subdomains,) * 2, None)
@@ -744,7 +801,7 @@ def discretize(grid_and_problem_data):
     local_eta_rf_squared = np.array([apply_l2_product(grid, ii, f, f, over_integrate=2) for ii in
                                      range(grid.num_subdomains)])
     estimator = Estimator(min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs, mu_bar, mu_hat,
-                          fr_op)
+                          fr_op, oi_op)
 
     d = DuneDiscretization(block_op, block_rhs, visualizer=DuneGDTVisualizer(block_space),
                            operators=operators, estimator=estimator)
