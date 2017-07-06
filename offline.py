@@ -6,7 +6,7 @@ from dune.gdt import make_discrete_function, project
 
 from pymor.bindings.dunext import DuneXTVector
 from pymor.core.logger import getLogger
-from pymor.reductors.system import GenericRBSystemReductor
+from lrbms import LRBMSReductor
 from pymor.vectorarrays.list import ListVectorArray
 
 
@@ -15,8 +15,8 @@ def init_local_reduced_bases(grid, d, block_space, order):
     if order > 1:
         order = 1
     U = d.solution_space.empty()
-    reductor = GenericRBSystemReductor(d, products=[d.operators['local_energy_dg_product_{}'.format(ii)]
-                                                    for ii in range(block_space.num_blocks)])
+    reductor = LRBMSReductor(d, products=[d.operators['local_energy_dg_product_{}'.format(ii)]
+                                          for ii in range(block_space.num_blocks)])
     if order >= 0:
         logger.info('initializing local reduced bases with DG shape functions of up to order {} ... '.format(order))
 
