@@ -22,9 +22,8 @@ def init_local_reduced_bases(grid, d, block_space, order):
 
         # order 0 basis
         for ii in range(block_space.num_blocks):
-            local_space = block_space.local_space(ii)
-            reductor.extend_basis_local(ListVectorArray([DuneXTVector(Vector(local_space.size(), 1.)), ],
-                                                        U._blocks[ii].space))
+            local_space = d.solution_space.subspaces[ii]
+            reductor.extend_basis_local(local_space.make_array([Vector(local_space.dim, 1.)]))
     if order >= 1:
         for ii in range(block_space.num_blocks):
             local_space = block_space.local_space(ii)
