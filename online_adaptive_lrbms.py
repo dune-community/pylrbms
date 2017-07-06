@@ -81,7 +81,6 @@ reductor = init_local_reduced_bases(grid, LRBMS_d, block_space, config['initial_
 
 with logger.block('reducing ...') as _:
     rd = reductor.reduce()
-    rd = rd.with_(estimator=LRBMS_d.estimator)
 logger.info('')
 
 with logger.block('estimating some reduced errors:') as _:
