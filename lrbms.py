@@ -9,9 +9,6 @@ from pymor.operators.numpy import NumpyMatrixOperator
 
 class LRBMSReductor(GenericRBSystemReductor):
 
-    def __init__(self, d, products=None):
-        super().__init__(d, products=products)
-
     def _reduce(self):
         d = self.d
 
