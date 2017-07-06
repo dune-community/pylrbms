@@ -18,7 +18,7 @@ from dune.gdt import (
 from pymor.bindings.dunext import DuneXTMatrixOperator
 from pymor.core.interfaces import BasicInterface
 from pymor.operators.constructions import LincombOperator, VectorFunctional
-from pymor.reductors.system import GenericRBSystemReductor
+from lrbms import LRBMSReductor
 
 
 def doerfler_marking(indicators, theta):
@@ -107,7 +107,7 @@ def solve_for_local_correction(grid, subdomain, local_boundary_info, affine_lamb
 class AdaptiveEnrichment(BasicInterface):
 
     def __init__(self, grid_and_problem_data, discretization, block_space, reductor, rd,
-            target_error, marking_doerfler_theta, marking_max_age, fake_estimator=None):
+                 target_error, marking_doerfler_theta, marking_max_age):
         self.grid_and_problem_data = grid_and_problem_data
         self.discretization = discretization
         self.block_space = block_space
@@ -128,7 +128,7 @@ class AdaptiveEnrichment(BasicInterface):
             marked_subdomains.add(ii)
         num_age_marked = len(marked_subdomains) - num_dorfler_marked
         self.logger.info3('   and {}/{} additionally due to age marking'.format(num_age_marked, self.block_space.num_blocks - num_dorfler_marked))
-        new_reductor = GenericRBSystemReductor(self.discretization, {id_: b.copy() for id_, b in self.reductor.bases.items()})
+        new_reductor = LRBMSReductor(self.discretization, {id_: b.copy() for id_, b in self.reductor.bases.items()})
         self.logger.info3('solving local corrector problems on {} subdomain{} ...'.format(
             len(marked_subdomains), 's' if len(marked_subdomains) > 1 else ''))
         for ii in marked_subdomains:
@@ -138,9 +138,7 @@ class AdaptiveEnrichment(BasicInterface):
                     self.discretization, self.block_space, self.reductor, U, mu)
             new_reductor.extend_basis_local(local_correction)
         self.reductor = new_reductor
-        estimator = self.discretization.estimator
         self.rd = self.reductor.reduce()
-        self.rd = self.rd.with_(estimator=estimator)
         # clear age count
         for ii in range(self.block_space.num_blocks):
             if ii in marked_subdomains:
