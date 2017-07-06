@@ -454,6 +454,22 @@ class DuneDiscretization(StationaryDiscretization):
     def unblock(self, U):
         return self.operators['global_op'].source.from_data(U.data)
 
+    def shape_functions(self, subdomain, order=0):
+        assert 0 <= order <= 1
+        local_space = self.solution_space.subspaces[subdomain]
+        U = local_space.make_array([Vector(local_space.dim, 1.)])
+
+        if order == 1:
+            from dune.gdt import make_discrete_function, project
+            dune_local_space = self.visualizer.space.local_space(subdomain)
+            tmp_discrete_function = make_discrete_function(dune_local_space)
+            for expression in ('x[0]', 'x[1]', 'x[0]*x[1]'):
+                func = make_expression_function_1x1(grid, 'x', expression, order=2)
+                project(func, tmp_discrete_function)
+                U.append(local_space.make_array([tmp_discrete_function.vector_copy()]))
+
+        return U
+
 
 def discretize(grid_and_problem_data):
     logger = getLogger('discretize_elliptic.discretize_block_SWIPDG')

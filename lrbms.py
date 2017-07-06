@@ -9,6 +9,19 @@ from pymor.operators.numpy import NumpyMatrixOperator
 
 class LRBMSReductor(GenericRBSystemReductor):
 
+    def __init__(self, d, bases=None, products=None, order=None):
+        assert order is None or 0 <= order <= 1
+        super().__init__(d, bases=bases, products=products)
+
+        if order is None and bases is None:
+            order = 0
+        if order is not None:
+            self.logger.info(
+                'initializing local reduced bases with DG shape functions of up to order {} ... '.format(order)
+            )
+            for ii in range(len(d.solution_space.subspaces)):
+                self.extend_basis_local(d.shape_functions(ii, order))
+
     def _reduce(self):
         d = self.d
 

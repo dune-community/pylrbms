@@ -7,7 +7,6 @@ from pymor.core.exceptions import ExtensionError
 # from thermalblock_problem import init_grid_and_problem
 from OS2015_academic_problem import init_grid_and_problem
 from discretize_elliptic import discretize
-from offline import init_local_reduced_bases
 from lrbms import LRBMSReductor
 
 from pymor.core.logger import set_log_levels

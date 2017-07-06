@@ -10,15 +10,16 @@ set_log_levels({'online_adaptive_lrbms': 'DEBUG',
                 'OS2015_academic_problem': 'INFO',
                 'discretize_elliptic': 'INFO',
                 'offline': 'INFO',
-                'online_enrichment': 'INFO'})
+                'online_enrichment': 'INFO',
+                'lrbms': 'INFO'})
 logger = getLogger('online_adaptive_lrbms.online_adaptive_lrbms')
 from pymor.discretizations.basic import StationaryDiscretization
 
 from OS2015_academic_problem import init_grid_and_problem
 # from local_thermalblock_problem import init_grid_and_problem
 from discretize_elliptic import discretize
-from offline import init_local_reduced_bases
 from online_enrichment import AdaptiveEnrichment
+from lrbms import LRBMSReductor
 
 # max discretization error, to derive enrichment_target_error
 # ===========================================================
@@ -66,7 +67,11 @@ d.disable_logging()
 #  (ii) use the high-dimensional estimator (no offline effort, medium online effort).
 
 LRBMS_d = d
-reductor = init_local_reduced_bases(grid, LRBMS_d, block_space, config['initial_RB_order'])
+reductor = LRBMSReductor(
+    d,
+    products=[d.operators['local_energy_dg_product_{}'.format(ii)] for ii in range(block_space.num_blocks)],
+    order=config['initial_RB_order']
+)
 
 
 # logger.info('adding some global solution snapshots to reduced basis ...')
