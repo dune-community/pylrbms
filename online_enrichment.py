@@ -22,19 +22,19 @@ from lrbms import LRBMSReductor
 
 
 def doerfler_marking(indicators, theta):
-	assert 0.0 < theta <= 1.0
-	indices = list(range(len(indicators)))
-	indicators = [ii**2 for ii in indicators]
-	indicators, indices = [list(x) for x in zip(*sorted(zip(indicators, indices),
+    assert 0.0 < theta <= 1.0
+    indices = list(range(len(indicators)))
+    indicators = [ii**2 for ii in indicators]
+    indicators, indices = [list(x) for x in zip(*sorted(zip(indicators, indices),
                                                             key=lambda pair: pair[0],
                                                             reverse=True))]
-	total = np.sum(indicators)
-	sums = np.array([np.sum(indicators[:ii+1]) for ii in np.arange(len(indicators))])
-	where = sums > theta*total
-	if np.any(where):
-		return indices[:np.argmax(where)+1]
-	else:
-		return indices
+    total = np.sum(indicators)
+    sums = np.array([np.sum(indicators[:ii+1]) for ii in np.arange(len(indicators))])
+    where = sums > theta*total
+    if np.any(where):
+        return indices[:np.argmax(where)+1]
+    else:
+        return indices
 
 
 def solve_for_local_correction(grid, subdomain, local_boundary_info, affine_lambda, kappa, f, d, block_space, reductor, reduced_U, mu):
