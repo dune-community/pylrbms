@@ -118,7 +118,6 @@ class AdaptiveEnrichment(BasicInterface):
         self.target_error = target_error
         self.marking_doerfler_theta = marking_doerfler_theta
         self.marking_max_age = marking_max_age
-        self.fake_estimator = fake_estimator
 
     def _enrich_once(self, U, mu, indicators, age_count):
         marked_subdomains = set(doerfler_marking(indicators, self.marking_doerfler_theta))
@@ -139,11 +138,7 @@ class AdaptiveEnrichment(BasicInterface):
                     self.discretization, self.block_space, self.reductor, U, mu)
             new_reductor.extend_basis_local(local_correction)
         self.reductor = new_reductor
-        if self.fake_estimator:
-            estimator = self.fake_estimator
-            estimator.reductor = self.reductor
-        else:
-            estimator = self.discretization.estimator
+        estimator = self.discretization.estimator
         self.rd = self.reductor.reduce()
         self.rd = self.rd.with_(estimator=estimator)
         # clear age count

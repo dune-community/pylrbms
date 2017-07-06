@@ -36,7 +36,6 @@ config = {'num_coarse_grid_elements': [4, 4],
           'num_grid_oversampling_layers': 4, # num_grid_oversampling_layers has to exactly cover one subdomain!
           'initial_RB_order': 0,
           'enrichment_target_error': 1.,
-          'fake_estimator': False,
           'marking_doerfler_theta': 0.8,
           'marking_max_age': 2}
 
@@ -66,34 +65,8 @@ d.disable_logging()
 #  (i)  use the offline/online decomposable estimator (large offline computational effort, instant online estimation); or we
 #  (ii) use the high-dimensional estimator (no offline effort, medium online effort).
 
-if config['fake_estimator']:
-
-    class FakeEstimator(object):
-
-        def __init__(self, disc, reductor):
-            self.disc = disc
-            self.reductor = reductor
-
-        def estimate(self, U, mu, discretization, decompose=False):
-            return self.disc.estimate(self.reductor.reconstruct(U), mu=mu, decompose=decompose)
-
-    LRBMS_d = d.with_(operators={name: op
-                                 for name, op in d.operators.items() if (
-                                     name != 'operator'
-                                     and name != 'rhs'
-                                     and name[:3] != 'nc_'
-                                     and name[:1] != 'r'
-                                     and name[:3] != 'df_'
-                                     and name[:7] != 'global_')})
-
-    reductor = init_local_reduced_bases(grid, LRBMS_d, block_space, config['initial_RB_order'])
-
-    LRBMS_d = LRBMS_d.with_(estimator=FakeEstimator(d, reductor))
-
-else:
-
-    LRBMS_d = d
-    reductor = init_local_reduced_bases(grid, LRBMS_d, block_space, config['initial_RB_order'])
+LRBMS_d = d
+reductor = init_local_reduced_bases(grid, LRBMS_d, block_space, config['initial_RB_order'])
 
 
 # logger.info('adding some global solution snapshots to reduced basis ...')
@@ -124,8 +97,7 @@ logger.info('online phase:')
 online_adaptive_LRBMS = AdaptiveEnrichment(grid_and_problem_data, LRBMS_d, block_space,
                                            reductor, rd, config['enrichment_target_error'],
                                            config['marking_doerfler_theta'],
-                                           config['marking_max_age'],
-                                           fake_estimator=LRBMS_d.estimator if config['fake_estimator'] else None)
+                                           config['marking_max_age'])
 for mu in rd.parameter_space.sample_randomly(20):
     U, _, _ = online_adaptive_LRBMS.solve(mu)
 
@@ -134,4 +106,3 @@ logger.info('local basis sizes:')
 for name, basis in online_adaptive_LRBMS.reductor.bases.items():
     logger.info('{}: {}'.format(name, len(basis)))
 logger.info('finished')
-
