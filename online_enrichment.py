@@ -128,7 +128,6 @@ class AdaptiveEnrichment(BasicInterface):
             marked_subdomains.add(ii)
         num_age_marked = len(marked_subdomains) - num_dorfler_marked
         self.logger.info3('   and {}/{} additionally due to age marking'.format(num_age_marked, self.block_space.num_blocks - num_dorfler_marked))
-        new_reductor = LRBMSReductor(self.discretization, {id_: b.copy() for id_, b in self.reductor.bases.items()})
         self.logger.info3('solving local corrector problems on {} subdomain{} ...'.format(
             len(marked_subdomains), 's' if len(marked_subdomains) > 1 else ''))
         for ii in marked_subdomains:
@@ -136,8 +135,7 @@ class AdaptiveEnrichment(BasicInterface):
                     self.grid_and_problem_data['grid'], ii, self.local_boundary_info,
                     self.grid_and_problem_data['lambda'], self.grid_and_problem_data['kappa'], self.grid_and_problem_data['f'],
                     self.discretization, self.block_space, self.reductor, U, mu)
-            new_reductor.extend_basis_local(local_correction)
-        self.reductor = new_reductor
+            self.reductor.extend_basis_local(local_correction)
         self.rd = self.reductor.reduce()
         # clear age count
         for ii in range(self.block_space.num_blocks):
