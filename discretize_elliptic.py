@@ -15,10 +15,14 @@ from dune.xt.la import (
 )
 from dune.gdt import (
     RS2017_apply_l2_product as apply_l2_product,
+    RS2017_make_elliptic_matrix_operator_on_subdomain as make_local_elliptic_matrix_operator,
+    RS2017_make_elliptic_swipdg_matrix_operator_on_neighborhood as make_elliptic_swipdg_matrix_operator_on_neighborhood,
+    RS2017_make_elliptic_swipdg_vector_functional_on_neighborhood as make_elliptic_swipdg_vector_functional_on_neighborhood,
+    RS2017_make_l2_vector_functional_on_neighborhood as make_l2_vector_functional_on_neighborhood,
+    RS2017_make_neighborhood_system_assembler as make_neighborhood_system_assembler,
     RS2017_make_penalty_product_matrix_operator_on_subdomain as make_penalty_product_matrix_operator,
     RS2017_residual_indicator_min_diffusion_eigenvalue as min_diffusion_eigenvalue,
     RS2017_residual_indicator_subdomain_diameter as subdomain_diameter,
-    RS2017_make_elliptic_matrix_operator_on_subdomain as make_local_elliptic_matrix_operator,
     make_block_dg_dd_subdomain_part_to_1x1_fem_p1_space as make_block_space,
     make_discrete_function,
     make_elliptic_matrix_operator_istl_row_major_sparse_matrix_double as make_elliptic_matrix_operator,
@@ -428,6 +432,16 @@ class Estimator(ImmutableInterface):
 
 class DuneDiscretization(StationaryDiscretization):
 
+    def __init__(self, operator, rhs, neighborhoods,
+                 enrichment_data,  # = grid, local_boundary_info, affine_lambda, kappa, f, block_space
+                 products=None, operators=None,
+                 parameter_space=None, estimator=None, visualizer=None, cache_region=None, name=None):
+        super().__init__(operator, rhs, products=products, operators=operators,
+                         parameter_space=parameter_space, estimator=estimator, visualizer=visualizer,
+                         cache_region=cache_region, name=name)
+        self.neighborhoods = neighborhoods
+        self.enrichment_data = enrichment_data
+
     def _solve(self, mu):
         if not self.logging_disabled:
             self.logger.info('Solving {} for {} ...'.format(self.name, mu))
@@ -469,6 +483,69 @@ class DuneDiscretization(StationaryDiscretization):
                 U.append(local_space.make_array([tmp_discrete_function.vector_copy()]))
 
         return U
+
+    def solve_for_local_correction(self, subdomain, Us, mu=None):
+        grid, local_boundary_info, affine_lambda, kappa, f, block_space = self.enrichment_data
+        neighborhood = self.neighborhoods[subdomain]
+        neighborhood_space = block_space.restricted_to_neighborhood(neighborhood)
+        # Compute current solution restricted to the neighborhood to be usable as Dirichlet values for the correction
+        # problem.
+        current_solution = [U._list for U in Us]
+        assert np.all(len(v) == 1 for v in current_solution)
+        current_solution = [v[0].impl for v in current_solution]
+        current_solution = neighborhood_space.project_onto_neighborhood(current_solution, neighborhood)
+        current_solution = make_discrete_function(neighborhood_space, current_solution)
+        # Solve the local corrector problem.
+        #   LHS
+        ops = []
+        for lambda_ in affine_lambda['functions']:
+            ops.append(make_elliptic_swipdg_matrix_operator_on_neighborhood(
+                grid, subdomain, local_boundary_info,
+                neighborhood_space,
+                lambda_, kappa,
+                over_integrate=0))
+        ops_coeffs = affine_lambda['coefficients'].copy()
+        #   RHS
+        funcs = []
+        for lambda_ in affine_lambda['functions']:
+            funcs.append(make_elliptic_swipdg_vector_functional_on_neighborhood(
+                grid, subdomain, local_boundary_info,
+                neighborhood_space,
+                current_solution, lambda_, kappa,
+                over_integrate=0))
+        funcs_coeffs = affine_lambda['coefficients'].copy()
+        funcs.append(make_l2_vector_functional_on_neighborhood(
+            grid, subdomain,
+            neighborhood_space,
+            f,
+            over_integrate=0))
+        funcs_coeffs.append(1.)
+        #   assemble in one grid walk
+        neighborhood_assembler = make_neighborhood_system_assembler(grid, subdomain, neighborhood_space)
+        for op in ops:
+            neighborhood_assembler.append(op)
+        for func in funcs:
+            neighborhood_assembler.append(func)
+        neighborhood_assembler.assemble()
+        # solve
+        local_space_id = self.solution_space.subspaces[subdomain].id
+        lhs = LincombOperator([DuneXTMatrixOperator(o.matrix(), source_id=local_space_id, range_id=local_space_id) for o in ops], ops_coeffs)
+        rhs = LincombOperator([VectorFunctional(lhs.range.make_array([v.vector()])) for v in funcs], funcs_coeffs)
+        correction = lhs.apply_inverse(rhs.as_source_array(mu), mu=mu)
+        assert len(correction) == 1
+        # restrict to subdomain
+        local_sizes = [block_space.local_space(nn).size() for nn in neighborhood]
+        local_starts = [int(np.sum(local_sizes[:nn])) for nn in range(len(local_sizes))]
+        local_starts.append(neighborhood_space.mapper.size)
+        localized_corrections_as_np = np.array(correction._list[0].impl, copy=False)
+        localized_corrections_as_np = [localized_corrections_as_np[local_starts[nn]:local_starts[nn+1]] for nn in range(len(local_sizes))]
+        subdomain_index_in_neighborhood = np.where(np.array(list(neighborhood)) == subdomain)[0]
+        assert len(subdomain_index_in_neighborhood) == 1
+        subdomain_index_in_neighborhood = subdomain_index_in_neighborhood[0]
+        subdomain_correction = Vector(local_sizes[subdomain_index_in_neighborhood], 0.)
+        subdomain_correction_as_np = np.array(subdomain_correction, copy=False)
+        subdomain_correction_as_np[:] = localized_corrections_as_np[subdomain_index_in_neighborhood][:]
+        return self.solution_space.subspaces[subdomain].make_array([subdomain_correction])
 
 
 def discretize(grid_and_problem_data):
@@ -819,7 +896,13 @@ def discretize(grid_and_problem_data):
     estimator = Estimator(min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs, mu_bar, mu_hat,
                           fr_op, oi_op)
 
-    d = DuneDiscretization(block_op, block_rhs, visualizer=DuneGDTVisualizer(block_space),
+    neighborhoods = [grid.neighborhood_of(ii) for ii in range(grid.num_subdomains)]
+    local_boundary_info = make_subdomain_boundary_info(grid_and_problem_data['grid'],
+                                                       {'type': 'xt.grid.boundaryinfo.alldirichlet'})
+    d = DuneDiscretization(block_op, block_rhs,
+                           neighborhoods,
+                           (grid, local_boundary_info, affine_lambda, kappa, f, block_space),
+                           visualizer=DuneGDTVisualizer(block_space),
                            operators=operators, estimator=estimator)
     d = d.with_(parameter_space=CubicParameterSpace(d.parameter_type, parameter_range[0], parameter_range[1]))
 

@@ -63,3 +63,8 @@ class LRBMSReductor(GenericRBSystemReductor):
         rd = rd.with_(estimator=red_estimator)
 
         return rd
+
+    def enrich_local(self, subdomain, U, mu=None):
+        Us = [self.reconstruct_local(U, 'domain_{}'.format(sdi)) for sdi in self.d.neighborhoods[subdomain]]
+        local_correction = self.d.solve_for_local_correction(subdomain, Us, mu)
+        self.extend_basis_local(local_correction)
