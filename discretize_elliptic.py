@@ -235,28 +235,40 @@ class ResidualPartOperator(EstimatorOperatorBase):
 
     RT_source = True
     RT_range = True
+    _subdomain_rt_spaces = {}
+    _matrices = {}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.subdomain not in self._subdomain_rt_spaces:
+            self._subdomain_rt_spaces[self.subdomain] = self.global_rt_space.restrict_to_dd_subdomain_part(
+                    self.grid, self.subdomain)
+        self.subdomain_rt_space = self._subdomain_rt_spaces[self.subdomain]
+        if self.subdomain not in self._matrices:
+            h_div_semi_product = make_Hdiv_semi_product_matrix_operator_on_subdomain(
+                    self.grid, self.subdomain,
+                    self.subdomain_rt_space,
+                    over_integrate=2)
+            subdomain_walker = make_subdomain_walker(self.grid, self.subdomain)
+            subdomain_walker.append(h_div_semi_product)
+            subdomain_walker.walk()
+            self._matrices[self.subdomain] = DuneXTMatrixOperator(h_div_semi_product.matrix(),
+                                                                  range_id='RT_{}'.format(self.subdomain),
+                                                                  source_id='RT_{}'.format(self.subdomain))
+        self.matrix = self._matrices[self.subdomain]
 
     def apply(self, U, mu=None):
         raise NotImplementedError
 
-    def _apply2(self, V, U, mu=None):
-        assert len(V) == 1 and len(U) == 1
+    def apply2(self, V, U, mu=None):
         assert V in self.range and U in self.source
 
-        subdomain_rt_space = self.global_rt_space.restrict_to_dd_subdomain_part(self.grid, self.subdomain)
-        h_div_semi_product = make_Hdiv_semi_product_matrix_operator_on_subdomain(
-                self.grid, self.subdomain,
-                subdomain_rt_space,
-                over_integrate=2)
-        subdomain_walker = make_subdomain_walker(self.grid, self.subdomain)
-        subdomain_walker.append(h_div_semi_product)
-        subdomain_walker.walk()
-        h_div_semi_product = h_div_semi_product.matrix()
+        reconstructed_vh_jj_on_subdomain = self.matrix.range.make_array(
+                [self.subdomain_rt_space.restrict(v.impl) for v in V._list])
+        reconstructed_uh_kk_on_subdomain = self.matrix.source.make_array(
+                [self.subdomain_rt_space.restrict(u.impl) for u in U._list])
 
-        reconstructed_vh_jj_on_subdomain = subdomain_rt_space.restrict(V._list[0].impl)
-        reconstructed_uh_kk_on_subdomain = subdomain_rt_space.restrict(U._list[0].impl)
-
-        return reconstructed_vh_jj_on_subdomain * (h_div_semi_product * reconstructed_uh_kk_on_subdomain)
+        return self.matrix.apply2(reconstructed_vh_jj_on_subdomain, reconstructed_uh_kk_on_subdomain)
 
 
 class ResidualPartFunctional(EstimatorOperatorBase):
