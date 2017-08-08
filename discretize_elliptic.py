@@ -240,20 +240,23 @@ class ResidualPartOperator(EstimatorOperatorBase):
         raise NotImplementedError
 
     def _apply2(self, V, U, mu=None):
-        from dune.gdt import RS2017_apply_l2_product as apply_l2_product
-
         assert len(V) == 1 and len(U) == 1
         assert V in self.range and U in self.source
 
-        reconstructed_vh_jj_with_global_support = make_discrete_function(self.global_rt_space, V._list[0].impl)
-        reconstructed_uh_kk_with_global_support = make_discrete_function(self.global_rt_space, U._list[0].impl)
+        subdomain_rt_space = self.global_rt_space.restrict_to_dd_subdomain_part(self.grid, self.subdomain)
+        h_div_semi_product = make_Hdiv_semi_product_matrix_operator_on_subdomain(
+                self.grid, self.subdomain,
+                subdomain_rt_space,
+                over_integrate=2)
+        subdomain_walker = make_subdomain_walker(self.grid, self.subdomain)
+        subdomain_walker.append(h_div_semi_product)
+        subdomain_walker.walk()
+        h_div_semi_product = h_div_semi_product.matrix()
 
-        return apply_l2_product(
-            self.grid, self.subdomain,
-            reconstructed_vh_jj_with_global_support.divergence(),
-            reconstructed_uh_kk_with_global_support.divergence(),
-            over_integrate=2
-        )
+        reconstructed_vh_jj_on_subdomain = subdomain_rt_space.restrict(V._list[0].impl)
+        reconstructed_uh_kk_on_subdomain = subdomain_rt_space.restrict(U._list[0].impl)
+
+        return reconstructed_vh_jj_on_subdomain * (h_div_semi_product * reconstructed_uh_kk_on_subdomain)
 
 
 class ResidualPartFunctional(EstimatorOperatorBase):
