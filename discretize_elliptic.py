@@ -7,6 +7,7 @@ import numpy as np
 from dune.xt.grid import (
     make_apply_on_dirichlet_intersections_dd_subdomain_boundary_part as make_apply_on_dirichlet_intersections,
     make_boundary_info_on_dd_subdomain_layer as make_subdomain_boundary_info,
+    make_walker_on_dd_subdomain_part as make_subdomain_walker
 )
 from dune.xt.la import (
     IstlDenseVectorDouble as Vector,
@@ -14,6 +15,11 @@ from dune.xt.la import (
     SparsityPatternDefault,
 )
 from dune.gdt import (
+    RS2017_make_residual_part_vector_functional_on_subdomain as make_residual_part_vector_functional_on_subdomain,
+    RS2017_make_Hdiv_semi_product_matrix_operator_on_subdomain as make_Hdiv_semi_product_matrix_operator_on_subdomain,
+    RS2017_make_diffusive_flux_aa_product_matrix_operator_on_subdomain as make_diffusive_flux_aa_product,
+    RS2017_make_diffusive_flux_ab_product_matrix_operator_on_subdomain as make_diffusive_flux_ab_product,
+    RS2017_make_diffusive_flux_bb_product_matrix_operator_on_subdomain as make_diffusive_flux_bb_product,
     RS2017_apply_l2_product as apply_l2_product,
     RS2017_make_elliptic_matrix_operator_on_subdomain as make_local_elliptic_matrix_operator,
     RS2017_make_elliptic_swipdg_matrix_operator_on_neighborhood as make_elliptic_swipdg_matrix_operator_on_neighborhood,
