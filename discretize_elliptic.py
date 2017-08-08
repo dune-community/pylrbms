@@ -274,31 +274,37 @@ class ResidualPartOperator(EstimatorOperatorBase):
 class ResidualPartFunctional(EstimatorOperatorBase):
 
     RT_source = True
+    _subdomain_rt_spaces = {}
+    _vectors = {}
 
     def __init__(self, f, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.range = NumpyVectorSpace(1)
         self.f = f
+        if self.subdomain not in self._subdomain_rt_spaces:
+            self._subdomain_rt_spaces[self.subdomain] = self.global_rt_space.restrict_to_dd_subdomain_part(
+                    self.grid, self.subdomain)
+        self.subdomain_rt_space = self._subdomain_rt_spaces[self.subdomain]
+        if self.subdomain not in self._vectors:
+            eta_r_fxRu_functional = make_residual_part_vector_functional_on_subdomain(
+                    self.grid, self.subdomain,
+                    self.subdomain_rt_space,
+                    self.f,
+                    over_integrate=2)
+            subdomain_walker = make_subdomain_walker(self.grid, self.subdomain)
+            subdomain_walker.append(eta_r_fxRu_functional)
+            subdomain_walker.walk()
+            # too lazy to create the correct vector space belonging to self.subdomain_rt_space
+            # which would be required for a VectorFunctional
+            self._vectors[self.subdomain] = eta_r_fxRu_functional.vector()
+        self.vector = self._vectors[self.subdomain]
 
     def _apply(self, U, mu=None):
         assert len(U) == 1
         assert U in self.source
 
-        subdomain_rt_space = self.global_rt_space.restrict_to_dd_subdomain_part(self.grid, self.subdomain)
-        eta_r_fxRu_functional = make_residual_part_vector_functional_on_subdomain(
-                self.grid, self.subdomain,
-                subdomain_rt_space,
-                self.f,
-                over_integrate=0)
-        subdomain_walker = make_subdomain_walker(self.grid, self.subdomain)
-        subdomain_walker.append(eta_r_fxRu_functional)
-        subdomain_walker.walk()
-        eta_r_fxRu_functional = eta_r_fxRu_functional.vector()
-
-        reconstructed_uh_jj_on_subdomain = subdomain_rt_space.restrict(U._list[0].impl)
-        result = eta_r_fxRu_functional*reconstructed_uh_jj_on_subdomain
-
-        return self.range.from_data(np.array([[result]]))
+        reconstructed_uh_jj_on_subdomain = self.subdomain_rt_space.restrict(U._list[0].impl)
+        return self.range.from_data(np.array([[self.vector*reconstructed_uh_jj_on_subdomain]]))
 
 
 class DiffusiveFluxOperatorAA(EstimatorOperatorBase):
