@@ -295,24 +295,24 @@ class DiffusiveFluxOperatorAA(EstimatorOperatorBase):
         raise NotImplementedError
 
     def _apply2(self, V, U, mu=None):
-        from dune.gdt import (
-            RS2017_diffusive_flux_indicator_apply_aa_product as apply_diffusive_flux_aa_product,
-        )
-
         assert len(V) == 1 and len(U) == 1
         assert V in self.range and U in self.source
 
-        subdomain_vh = make_discrete_function(self.block_space.local_space(self.subdomain), V._list[0].impl)
-        subdomain_uh = make_discrete_function(self.block_space.local_space(self.subdomain), U._list[0].impl)
+        diffusive_flux_aa_product = make_diffusive_flux_aa_product(
+                self.grid, self.subdomain,
+                self.block_space.local_space(self.subdomain),
+                self.lambda_bar,
+                lambda_u=self.lambda_xi, lambda_v=self.lambda_xi_prime,
+                kappa=self.kappa,
+                over_integrate=2)
+        subdomain_walker = make_subdomain_walker(self.grid, self.subdomain)
+        subdomain_walker.append(diffusive_flux_aa_product)
+        subdomain_walker.walk()
+        diffusive_flux_aa_product = diffusive_flux_aa_product.matrix()
 
-        result = apply_diffusive_flux_aa_product(
-            self.grid, self.subdomain,
-            self.lambda_bar, lambda_u=self.lambda_xi, lambda_v=self.lambda_xi_prime,
-            kappa=self.kappa,
-            u=subdomain_uh,
-            v=subdomain_vh,
-            over_integrate=2
-        )
+        subdomain_vh = V._list[0].impl
+        subdomain_uh = U._list[0].impl
+        result = subdomain_vh * (diffusive_flux_aa_product * subdomain_uh)
 
         return np.array([[result]])
 
