@@ -326,22 +326,25 @@ class DiffusiveFluxOperatorBB(EstimatorOperatorBase):
         raise NotImplementedError
 
     def _apply2(self, V, U, mu=None):
-        from dune.gdt import (
-            RS2017_diffusive_flux_indicator_apply_bb_product as apply_diffusive_flux_bb_product,
-        )
-
         assert len(V) == 1 and len(U) == 1
         assert V in self.range and U in self.source
 
-        reconstructed_vh_jj_with_global_support = make_discrete_function(self.global_rt_space, V._list[0].impl)
-        reconstructed_uh_kk_with_global_support = make_discrete_function(self.global_rt_space, U._list[0].impl)
+        subdomain_rt_space = self.global_rt_space.restrict_to_dd_subdomain_part(self.grid, self.subdomain)
+        diffusive_flux_bb_product = make_diffusive_flux_bb_product(
+                self.grid, self.subdomain,
+                subdomain_rt_space,
+                self.lambda_bar,
+                kappa=self.kappa,
+                over_integrate=2)
+        subdomain_walker = make_subdomain_walker(self.grid, self.subdomain)
+        subdomain_walker.append(diffusive_flux_bb_product)
+        subdomain_walker.walk()
+        diffusive_flux_bb_product = diffusive_flux_bb_product.matrix()
 
-        result = apply_diffusive_flux_bb_product(
-            self.grid, self.subdomain,
-            self.lambda_bar, self.kappa,
-            reconstructed_vh_jj_with_global_support,
-            reconstructed_uh_kk_with_global_support,
-            over_integrate=2)
+        reconstructed_vh_jj_on_subdomain = subdomain_rt_space.restrict(V._list[0].impl)
+        reconstructed_uh_kk_on_subdomain = subdomain_rt_space.restrict(U._list[0].impl)
+
+        result = reconstructed_vh_jj_on_subdomain * (diffusive_flux_bb_product * reconstructed_uh_kk_on_subdomain)
 
         return np.array([[result]])
 
