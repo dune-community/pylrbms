@@ -266,21 +266,23 @@ class ResidualPartFunctional(EstimatorOperatorBase):
         self.f = f
 
     def _apply(self, U, mu=None):
-        from dune.gdt import (
-            RS2017_apply_l2_product as apply_l2_product
-        )
-
         assert len(U) == 1
         assert U in self.source
 
-        reconstructed_uh_jj_with_global_support = make_discrete_function(self.global_rt_space, U._list[0].impl)
+        subdomain_rt_space = self.global_rt_space.restrict_to_dd_subdomain_part(self.grid, self.subdomain)
+        eta_r_fxRu_functional = make_residual_part_vector_functional_on_subdomain(
+                self.grid, self.subdomain,
+                subdomain_rt_space,
+                self.f,
+                over_integrate=0)
+        subdomain_walker = make_subdomain_walker(self.grid, self.subdomain)
+        subdomain_walker.append(eta_r_fxRu_functional)
+        subdomain_walker.walk()
+        eta_r_fxRu_functional = eta_r_fxRu_functional.vector()
 
-        result = apply_l2_product(
-            self.grid, self.subdomain,
-            self.f,
-            reconstructed_uh_jj_with_global_support.divergence(),
-            over_integrate=2
-        )
+        reconstructed_uh_jj_on_subdomain = subdomain_rt_space.restrict(U._list[0].impl)
+        result = eta_r_fxRu_functional*reconstructed_uh_jj_on_subdomain
+
         return self.range.from_data(np.array([[result]]))
 
 
