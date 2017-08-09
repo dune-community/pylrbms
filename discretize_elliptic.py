@@ -9,6 +9,7 @@ from dune.xt.grid import (
     make_boundary_info_on_dd_subdomain_layer as make_subdomain_boundary_info,
     make_walker_on_dd_subdomain_part as make_subdomain_walker
 )
+from dune.xt.functions import make_expression_function_1x1
 from dune.xt.la import (
     IstlDenseVectorDouble as Vector,
     IstlRowMajorSparseMatrixDouble as Matrix,
