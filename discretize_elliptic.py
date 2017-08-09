@@ -309,13 +309,8 @@ class ResidualPartFunctional(EstimatorOperatorBase):
 
 class DiffusiveFluxOperatorAA(EstimatorOperatorBase):
 
-    def apply(self, U, mu=None):
-        raise NotImplementedError
-
-    def _apply2(self, V, U, mu=None):
-        assert len(V) == 1 and len(U) == 1
-        assert V in self.range and U in self.source
-
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         diffusive_flux_aa_product = make_diffusive_flux_aa_product(
                 self.grid, self.subdomain,
                 self.block_space.local_space(self.subdomain),
@@ -326,13 +321,16 @@ class DiffusiveFluxOperatorAA(EstimatorOperatorBase):
         subdomain_walker = make_subdomain_walker(self.grid, self.subdomain)
         subdomain_walker.append(diffusive_flux_aa_product)
         subdomain_walker.walk()
-        diffusive_flux_aa_product = diffusive_flux_aa_product.matrix()
+        self.matrix = DuneXTMatrixOperator(diffusive_flux_aa_product.matrix(),
+                                           range_id='domain_{}'.format(self.subdomain),
+                                           source_id='domain_{}'.format(self.subdomain))
 
-        subdomain_vh = V._list[0].impl
-        subdomain_uh = U._list[0].impl
-        result = subdomain_vh * (diffusive_flux_aa_product * subdomain_uh)
+    def apply(self, U, mu=None):
+        raise NotImplementedError
 
-        return np.array([[result]])
+    def _apply2(self, V, U, mu=None):
+        assert V in self.range and U in self.source
+        return self.matrix.apply2(V, U)
 
 
 class DiffusiveFluxOperatorBB(EstimatorOperatorBase):
@@ -381,19 +379,14 @@ class DiffusiveFluxOperatorAB(EstimatorOperatorBase):
 
     RT_source = True
 
-    def apply(self, U, mu=None):
-        raise NotImplementedError
-
-    def _apply2(self, V, U, mu=None):
-        assert len(V) == 1 and len(U) == 1
-        assert V in self.range and U in self.source
-
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         subdomain_space = self.block_space.local_space(self.subdomain)
-        subdomain_rt_space = self.global_rt_space.restrict_to_dd_subdomain_part(self.grid, self.subdomain)
+        self.subdomain_rt_space = self.global_rt_space.restrict_to_dd_subdomain_part(self.grid, self.subdomain)
         diffusive_flux_ab_product = make_diffusive_flux_ab_product(
                 self.grid, self.subdomain,
                 range_space=subdomain_space,
-                source_space=subdomain_rt_space,
+                source_space=self.subdomain_rt_space,
                 lambda_range=self.lambda_xi,
                 lambda_hat=self.lambda_bar,
                 kappa=self.kappa,
@@ -401,14 +394,20 @@ class DiffusiveFluxOperatorAB(EstimatorOperatorBase):
         subdomain_walker = make_subdomain_walker(self.grid, self.subdomain)
         subdomain_walker.append(diffusive_flux_ab_product)
         subdomain_walker.walk()
-        diffusive_flux_ab_product = diffusive_flux_ab_product.matrix()
+        self.matrix = DuneXTMatrixOperator(diffusive_flux_ab_product.matrix(),
+                                           range_id='domain_{}'.format(self.subdomain),
+                                           source_id='RT_{}'.format(self.subdomain))
 
-        subdomain_vh = V._list[0].impl
-        reconstructed_uh_kk_on_subdomain = subdomain_rt_space.restrict(U._list[0].impl)
+    def apply(self, U, mu=None):
+        raise NotImplementedError
 
-        result = subdomain_vh * (diffusive_flux_ab_product * reconstructed_uh_kk_on_subdomain)
+    def apply2(self, V, U, mu=None):
+        assert V in self.range and U in self.source
 
-        return np.array([[result]])
+        reconstructed_uh_kk_on_subdomain = self.matrix.source.make_array(
+                [self.subdomain_rt_space.restrict(u.impl) for u in U._list])
+
+        return self.matrix.apply2(V, reconstructed_uh_kk_on_subdomain)
 
 
 class Estimator(ImmutableInterface):
