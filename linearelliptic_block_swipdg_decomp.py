@@ -15,9 +15,9 @@ set_log_levels({'discretize_elliptic': 'INFO',
 
 
 config = {'num_coarse_grid_elements': [4, 4],
-          'num_grid_refinements': 6,
-          'num_grid_subdomains': [8, 8],
-          'num_grid_oversampling_layers': 4} # num_grid_oversampling_layers has to exactly cover one subdomain!
+          'num_grid_refinements': 2,
+          'num_grid_subdomains': [4, 4],
+          'num_grid_oversampling_layers': 2} # num_grid_oversampling_layers has to exactly cover one subdomain!
 
 
 grid_and_problem_data = init_grid_and_problem(config)
@@ -34,11 +34,11 @@ U = d.solve(mu)
 print('estimating error ', end='', flush=True)
 
 eta, (local_eta_nc, local_eta_r, local_eta_df), _ = d.estimate(U, mu=mu, decompose=True)
-print(*enumerate(local_eta_nc))
+# print(*enumerate(local_eta_nc))
 
 print('')
 print('  nonconformity indicator:  {} (should be 1.66e-01)'.format(np.linalg.norm(local_eta_nc)))
-print('  residual indicator:       {} (should be 2.89e-01)'.format(np.linalg.norm(local_eta_r)))
+print('  residual indicator:       {} (should be 1.45e-01)'.format(np.linalg.norm(local_eta_r)))
 print('  diffusive flux indicator: {} (should be 3.55e-01)'.format(np.linalg.norm(local_eta_df)))
 print('  estimated error:          {}'.format(eta))
 
@@ -68,7 +68,7 @@ print('estimating reduced error ', end='', flush=True)
 eta, (local_eta_nc, local_eta_r, local_eta_df), _ = rd.estimate(u, mu=mu, decompose=True)
 
 print('')
-print('  nonconformity indicator:  {} (should be 1.74598)'.format(np.linalg.norm(local_eta_nc)))
-print('  residual indicator:       {} (should be 0.28939)'.format(np.linalg.norm(local_eta_r)))
-print('  diffusive flux indicator: {} (should be 0.50916)'.format(np.linalg.norm(local_eta_df)))
+print('  nonconformity indicator:  {} (should be 1.66e-01)'.format(np.linalg.norm(local_eta_nc)))
+print('  residual indicator:       {} (should be 1.45e-01)'.format(np.linalg.norm(local_eta_r)))
+print('  diffusive flux indicator: {} (should be 3.55e-01)'.format(np.linalg.norm(local_eta_df)))
 print('  estimated error:          {}'.format(eta))
