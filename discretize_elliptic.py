@@ -34,6 +34,7 @@ from dune.gdt import (
     make_discrete_function,
     make_elliptic_matrix_operator_istl_row_major_sparse_matrix_double as make_elliptic_matrix_operator,
     make_elliptic_swipdg_affine_factor_matrix_operator as make_elliptic_swipdg_matrix_operator,
+    make_l2_matrix_operator,
     make_l2_volume_vector_functional,
     make_local_elliptic_swipdg_affine_factor_boundary_integral_operator_1x1_p1_dg_fem_space_dd_subdomain_coupling_intersection as make_local_elliptic_swipdg_boundary_operator,  # NOQA
     make_local_elliptic_swipdg_affine_factor_inner_integral_operator_1x1_p1_dg_fem_space_dd_subdomain_coupling_intersection as make_local_elliptic_swipdg_coupling_operator,  # NOQA
@@ -823,34 +824,41 @@ def discretize(grid_and_problem_data):
     # assemble local products
     for ii in range(grid.num_subdomains):
         local_space = block_space.local_space(ii)
-        # we want a larger pattern for the elliptic part, to allow for axpy with the penalty part
+        # we want a larger pattern to allow for axpy with other matrices
         tmp_local_matrix = Matrix(local_space.size(),
                                   local_space.size(),
                                   local_space.compute_pattern('face_and_volume'))
-        local_product_ops = []
-        local_product_coeffs = []
+        local_energy_product_ops = []
+        local_energy_product_coeffs = []
         for func, coeff in zip(affine_lambda['functions'], affine_lambda['coefficients']):
-            local_product_ops.append(make_elliptic_matrix_operator(
+            local_energy_product_ops.append(make_elliptic_matrix_operator(
                 func, kappa, tmp_local_matrix.copy(), local_space, over_integrate=0))
-            local_product_coeffs.append(coeff)
-            local_product_ops.append(make_penalty_product_matrix_operator(
+            local_energy_product_coeffs.append(coeff)
+            local_energy_product_ops.append(make_penalty_product_matrix_operator(
                 grid, ii, local_all_dirichlet_boundary_info,
                 local_space,
                 func, kappa, over_integrate=0))
-            local_product_coeffs.append(coeff)
+            local_energy_product_coeffs.append(coeff)
+        local_l2_product = make_l2_matrix_operator(tmp_local_matrix.copy(), local_space)
         del tmp_local_matrix
         local_assembler = make_system_assembler(local_space)
-        for local_product_op in local_product_ops:
+        for local_product_op in local_energy_product_ops:
             local_assembler.append(local_product_op)
+        local_assembler.append(local_l2_product)
         local_assembler.assemble()
-        local_product_name = 'local_energy_dg_product_{}'.format(ii)
-        local_product = LincombOperator([DuneXTMatrixOperator(op.matrix(),
-                                                              source_id='domain_{}'.format(ii),
-                                                              range_id='domain_{}'.format(ii))
-                                         for op in local_product_ops],
-                                        local_product_coeffs,
-                                        name=local_product_name)
-        operators[local_product_name] = local_product.assemble(mu_bar).with_(name=local_product_name)
+        local_energy_product_name = 'local_energy_dg_product_{}'.format(ii)
+        local_energy_product = LincombOperator([DuneXTMatrixOperator(op.matrix(),
+                                                                     source_id='domain_{}'.format(ii),
+                                                                     range_id='domain_{}'.format(ii))
+                                                for op in local_energy_product_ops],
+                                               local_energy_product_coeffs,
+                                               name=local_energy_product_name)
+        operators[local_energy_product_name] = local_energy_product.assemble(mu_bar).with_(
+                name=local_energy_product_name)
+        local_l2_product_name = 'local_l2_product_{}'.format(ii)
+        operators[local_l2_product_name] = DuneXTMatrixOperator(local_l2_product.matrix(),
+                                                                source_id='domain_{}'.format(ii),
+                                                                range_id='domain_{}'.format(ii))
 
     # assemble error estimator
     for ii in range(grid.num_subdomains):
