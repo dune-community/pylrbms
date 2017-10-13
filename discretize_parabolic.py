@@ -54,6 +54,7 @@ def discretize(grid_and_problem_data, T, nt):
                                                 local_l2_product.matrix.pattern(),
                                                 ii,
                                                 l2_mat)
+    mass = BlockDiagonalOperator([d.operators['local_l2_product_{}'.format(ii)] for ii in range(block_space.num_blocks)])
     ops = {k: v for k, v in d.operators.items()
            if k != 'operator' and k != 'rhs' and k != 'mass'}
     ops['global_mass'] = DuneXTMatrixOperator(l2_mat)
@@ -61,10 +62,12 @@ def discretize(grid_and_problem_data, T, nt):
                                        d.operator.source.zeros(1),
                                        d.operator,
                                        d.rhs,
+                                       mass=mass,
                                        time_stepper=ImplicitEulerTimeStepper(nt=nt,
                                                                              solver_options='operator'),
                                        products=d.products,
                                        operators=ops,
+                                       estimator=d.estimator,
                                        parameter_space=d.parameter_space,
                                        visualizer=DuneGDTVisualizer(block_space))
 
