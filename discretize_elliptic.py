@@ -476,43 +476,13 @@ class Estimator(ImmutableInterface):
             return eta
 
 
-class DuneDiscretization(StationaryDiscretization):
-
-    def __init__(self, operator, rhs, neighborhoods,
-                 enrichment_data,  # = grid, local_boundary_info, affine_lambda, kappa, f, block_space
-                 products=None, operators=None,
-                 parameter_space=None, estimator=None, visualizer=None, cache_region=None, name=None):
-        super().__init__(operator, rhs, products=products, operators=operators,
-                         parameter_space=parameter_space, estimator=estimator, visualizer=visualizer,
-                         cache_region=cache_region, name=name)
-        self.neighborhoods = neighborhoods
-        self.enrichment_data = enrichment_data
-
-    def _solve(self, mu):
-        if not self.logging_disabled:
-            self.logger.info('Solving {} for {} ...'.format(self.name, mu))
-
-        return self.solution_space.from_data(
-            self.operators['global_op'].apply_inverse(self.operators['global_rhs'].as_vector(mu=mu),
-                                                      mu=mu).data
-        )
-
-    def as_generic_type(self):
-        ops = dict(self.operators)
-        for op in ('operator',
-                   'rhs',
-                   'global_op',
-                   'global_rhs'):
-            if op in ops.keys():
-                del ops[op]
-
-        return StationaryDiscretization(self.operator, self.rhs, operators=ops, parameter_space=self.parameter_space)
+class DuneDiscretizationBase:
 
     def visualize(self, U, *args, **kwargs):
         self.visualizer.visualize(self.unblock(U), self, *args, **kwargs)
 
     def unblock(self, U):
-        return self.operators['global_op'].source.from_data(U.data)
+        return self.global_operator.source.from_data(U.data)
 
     def shape_functions(self, subdomain, order=0):
         assert 0 <= order <= 1
@@ -529,6 +499,30 @@ class DuneDiscretization(StationaryDiscretization):
                 U.append(local_space.make_array([tmp_discrete_function.vector_copy()]))
 
         return U
+
+
+class DuneDiscretization(DuneDiscretizationBase, StationaryDiscretization):
+
+    def __init__(self, global_operator, global_rhs,
+                 neighborhoods,
+                 enrichment_data,  # = grid, local_boundary_info, affine_lambda, kappa, f, block_space
+                 operator, rhs,
+                 products=None, operators=None,
+                 parameter_space=None, estimator=None, visualizer=None, cache_region=None, name=None):
+        super().__init__(operator, rhs, products=products, operators=operators,
+                         parameter_space=parameter_space, estimator=estimator, visualizer=visualizer,
+                         cache_region=cache_region, name=name)
+        self.global_operator, self.global_rhs, self.neighborhoods, self.enrichment_data = \
+            global_operator, global_rhs, neighborhoods, enrichment_data
+
+    def _solve(self, mu):
+        if not self.logging_disabled:
+            self.logger.info('Solving {} for {} ...'.format(self.name, mu))
+
+        return self.solution_space.from_data(
+            self.global_operator.apply_inverse(self.global_rhs.as_vector(mu=mu), mu=mu).data
+        )
+
 
     def solve_for_local_correction(self, subdomain, Us, mu=None):
         grid, local_boundary_info, affine_lambda, kappa, f, block_space = self.enrichment_data
@@ -789,14 +783,14 @@ def discretize(grid_and_problem_data):
         return op, block_op, rhs, block_rhs
 
     ops, block_ops, rhss, block_rhss = zip(*(discretize_lhs_for_lambda(l) for l in affine_lambda['functions']))
-    rhs = rhss[0]
+    global_rhs = rhss[0]
     block_rhs = block_rhss[0]
 
     lambda_coeffs = affine_lambda['coefficients']
-    op = LincombOperator(ops, lambda_coeffs)
+    global_operator = LincombOperator(ops, lambda_coeffs)
     block_op = LincombOperator(block_ops, lambda_coeffs, name='lhs')
 
-    operators = {'global_op': op, 'global_rhs': rhs}
+    operators = {}
     global_rt_space = make_rt_space(grid)
 
     def assemble_oswald_interpolation_error():
@@ -952,9 +946,12 @@ def discretize(grid_and_problem_data):
     neighborhoods = [grid.neighborhood_of(ii) for ii in range(grid.num_subdomains)]
     local_boundary_info = make_subdomain_boundary_info(grid_and_problem_data['grid'],
                                                        {'type': 'xt.grid.boundaryinfo.alldirichlet'})
-    d = DuneDiscretization(block_op, block_rhs,
+    d = DuneDiscretization(global_operator,
+                           global_rhs,
                            neighborhoods,
                            (grid, local_boundary_info, affine_lambda, kappa, f, block_space),
+                           block_op,
+                           block_rhs,
                            visualizer=DuneGDTVisualizer(block_space),
                            operators=operators, estimator=estimator)
     d = d.with_(parameter_space=CubicParameterSpace(d.parameter_type, parameter_range[0], parameter_range[1]))
