@@ -30,6 +30,7 @@ from dune.gdt import (
     RS2017_make_penalty_product_matrix_operator_on_subdomain as make_penalty_product_matrix_operator,
     RS2017_residual_indicator_min_diffusion_eigenvalue as min_diffusion_eigenvalue,
     RS2017_residual_indicator_subdomain_diameter as subdomain_diameter,
+    RS2017_make_divergence_matrix_operator_on_subdomain as make_divergence_matrix_operator_on_subdomain,
     make_block_dg_dd_subdomain_part_to_1x1_fem_p1_space as make_block_space,
     make_discrete_function,
     make_elliptic_matrix_operator_istl_row_major_sparse_matrix_double as make_elliptic_matrix_operator,
@@ -817,25 +818,25 @@ def discretize(grid_and_problem_data):
 
     # assemble local products
     for ii in range(grid.num_subdomains):
-        local_space = block_space.local_space(ii)
+        local_dg_space = block_space.local_space(ii)
         # we want a larger pattern to allow for axpy with other matrices
-        tmp_local_matrix = Matrix(local_space.size(),
-                                  local_space.size(),
-                                  local_space.compute_pattern('face_and_volume'))
+        tmp_local_matrix = Matrix(local_dg_space.size(),
+                                  local_dg_space.size(),
+                                  local_dg_space.compute_pattern('face_and_volume'))
         local_energy_product_ops = []
         local_energy_product_coeffs = []
         for func, coeff in zip(affine_lambda['functions'], affine_lambda['coefficients']):
             local_energy_product_ops.append(make_elliptic_matrix_operator(
-                func, kappa, tmp_local_matrix.copy(), local_space, over_integrate=0))
+                func, kappa, tmp_local_matrix.copy(), local_dg_space, over_integrate=0))
             local_energy_product_coeffs.append(coeff)
             local_energy_product_ops.append(make_penalty_product_matrix_operator(
                 grid, ii, local_all_dirichlet_boundary_info,
-                local_space,
+                local_dg_space,
                 func, kappa, over_integrate=0))
             local_energy_product_coeffs.append(coeff)
-        local_l2_product = make_l2_matrix_operator(tmp_local_matrix.copy(), local_space)
+        local_l2_product = make_l2_matrix_operator(tmp_local_matrix.copy(), local_dg_space)
         del tmp_local_matrix
-        local_assembler = make_system_assembler(local_space)
+        local_assembler = make_system_assembler(local_dg_space)
         for local_product_op in local_energy_product_ops:
             local_assembler.append(local_product_op)
         local_assembler.append(local_l2_product)
@@ -853,6 +854,14 @@ def discretize(grid_and_problem_data):
         operators[local_l2_product_name] = DuneXTMatrixOperator(local_l2_product.matrix(),
                                                                 source_id='domain_{}'.format(ii),
                                                                 range_id='domain_{}'.format(ii))
+        # divergence operator
+        local_rt_space = global_rt_space.restrict_to_dd_subdomain_part(grid, ii)
+        local_div_op = make_divergence_matrix_operator_on_subdomain(grid, ii, local_dg_space, local_rt_space)
+        local_div_op.assemble()
+        operators['local_divergence_{}'.format(ii)] = DuneXTMatrixOperator(local_div_op.matrix(),
+                                                                           source_id='RT_{}'.format(ii),
+                                                                           range_id='domain_{}'.format(ii),
+                                                                           name='local_divergence_{}'.format(ii))
 
     # assemble error estimator
     for ii in range(grid.num_subdomains):
