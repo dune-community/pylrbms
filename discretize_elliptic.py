@@ -81,6 +81,7 @@ class EstimatorOperatorBase(OperatorBase):
     RT_source = False
     RT_range = False
     linear = True
+    _subdomain_rt_spaces = {}
 
     def __init__(self, subdomain, jj, kk, global_space, grid, block_space, global_rt_space, neighborhood_boundary_info,
                  lambda_bar, lambda_xi, lambda_xi_prime, kappa):
@@ -98,9 +99,19 @@ class EstimatorOperatorBase(OperatorBase):
         self.jj = jj
         self.kk = kk
         vector_type = global_space.subspaces[0].vector_type
-        self.range = (DuneXTVectorSpace(vector_type, global_rt_space.size(), 'RT_' + str(jj)) if self.RT_range else
+
+        if not self._subdomain_rt_spaces:
+            for ii in range(grid.num_subdomains):
+                self._subdomain_rt_spaces[ii] = self.global_rt_space.restrict_to_dd_subdomain_part(
+                        self.grid, ii)
+
+        self.range = (BlockVectorSpace([DuneXTVectorSpace(vector_type, self._subdomain_rt_spaces[ii].size(), 'LOCALRT_' + str(ii))
+                                        for ii in grid.neighborhood_of(jj)],
+                                       'RT_{}'.format(self.jj)) if self.RT_range else
                       global_space.subspaces[self.jj])
-        self.source = (DuneXTVectorSpace(vector_type, global_rt_space.size(), 'RT_' + str(kk)) if self.RT_source else
+        self.source = (BlockVectorSpace([DuneXTVectorSpace(vector_type, self._subdomain_rt_spaces[ii].size(), 'LOCALRT_' + str(ii))
+                                        for ii in grid.neighborhood_of(kk)],
+                                        'RT_{}'.format(self.kk)) if self.RT_source else
                        global_space.subspaces[self.kk])
 
     def apply(self, U, mu=None):
@@ -188,7 +199,10 @@ class FluxReconstructionOperator(EstimatorOperatorBase):
             self.lambda_xi_prime, self.kappa,
             subdomain_uhs_with_global_support,
             reconstructed_uh_kk_with_global_support)
-        return self.range.make_array([reconstructed_uh_kk_with_global_support.vector_copy()])
+
+        blocks = [s.make_array([self._subdomain_rt_spaces[ii].restrict(reconstructed_uh_kk_with_global_support.vector_copy())])
+                  for s, ii in zip(self.range.subspaces, self.grid.neighborhood_of(self.kk))]
+        return self.range.make_array(blocks)
 
     def localize_to_subdomain_with_global_support(self, U, ss):
         assert len(U) == 1
@@ -238,14 +252,10 @@ class ResidualPartOperator(EstimatorOperatorBase):
 
     RT_source = True
     RT_range = True
-    _subdomain_rt_spaces = {}
     _matrices = {}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.subdomain not in self._subdomain_rt_spaces:
-            self._subdomain_rt_spaces[self.subdomain] = self.global_rt_space.restrict_to_dd_subdomain_part(
-                    self.grid, self.subdomain)
         self.subdomain_rt_space = self._subdomain_rt_spaces[self.subdomain]
         if self.subdomain not in self._matrices:
             h_div_semi_product = make_Hdiv_semi_product_matrix_operator_on_subdomain(
@@ -256,8 +266,8 @@ class ResidualPartOperator(EstimatorOperatorBase):
             subdomain_walker.append(h_div_semi_product)
             subdomain_walker.walk()
             self._matrices[self.subdomain] = DuneXTMatrixOperator(h_div_semi_product.matrix(),
-                                                                  range_id='RT_{}'.format(self.subdomain),
-                                                                  source_id='RT_{}'.format(self.subdomain))
+                                                                  range_id='LOCALRT_{}'.format(self.subdomain),
+                                                                  source_id='LOCALRT_{}'.format(self.subdomain))
         self.matrix = self._matrices[self.subdomain]
 
     def apply(self, U, mu=None):
@@ -266,10 +276,8 @@ class ResidualPartOperator(EstimatorOperatorBase):
     def apply2(self, V, U, mu=None):
         assert V in self.range and U in self.source
 
-        reconstructed_vh_jj_on_subdomain = self.matrix.range.make_array(
-                [self.subdomain_rt_space.restrict(v.impl) for v in V._list])
-        reconstructed_uh_kk_on_subdomain = self.matrix.source.make_array(
-                [self.subdomain_rt_space.restrict(u.impl) for u in U._list])
+        reconstructed_vh_jj_on_subdomain = V._blocks[self.grid.neighborhood_of(self.jj).index(self.subdomain)]
+        reconstructed_uh_kk_on_subdomain = U._blocks[self.grid.neighborhood_of(self.kk).index(self.subdomain)]
 
         return self.matrix.apply2(reconstructed_vh_jj_on_subdomain, reconstructed_uh_kk_on_subdomain)
 
@@ -277,16 +285,12 @@ class ResidualPartOperator(EstimatorOperatorBase):
 class ResidualPartFunctional(EstimatorOperatorBase):
 
     RT_source = True
-    _subdomain_rt_spaces = {}
     _vectors = {}
 
     def __init__(self, f, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.range = NumpyVectorSpace(1)
         self.f = f
-        if self.subdomain not in self._subdomain_rt_spaces:
-            self._subdomain_rt_spaces[self.subdomain] = self.global_rt_space.restrict_to_dd_subdomain_part(
-                    self.grid, self.subdomain)
         self.subdomain_rt_space = self._subdomain_rt_spaces[self.subdomain]
         if self.subdomain not in self._vectors:
             eta_r_fxRu_functional = make_residual_part_vector_functional_on_subdomain(
@@ -306,8 +310,8 @@ class ResidualPartFunctional(EstimatorOperatorBase):
         assert len(U) == 1
         assert U in self.source
 
-        reconstructed_uh_jj_on_subdomain = self.subdomain_rt_space.restrict(U._list[0].impl)
-        return self.range.from_data(np.array([[self.vector*reconstructed_uh_jj_on_subdomain]]))
+        reconstructed_uh_jj_on_subdomain = U._blocks[self.grid.neighborhood_of(self.kk).index(self.subdomain)]
+        return self.range.from_data(np.array([[self.vector*reconstructed_uh_jj_on_subdomain._list[0].impl]]))
 
 
 class DiffusiveFluxOperatorAA(EstimatorOperatorBase):
@@ -345,9 +349,6 @@ class DiffusiveFluxOperatorBB(EstimatorOperatorBase):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.subdomain not in self._subdomain_rt_spaces:
-            self._subdomain_rt_spaces[self.subdomain] = self.global_rt_space.restrict_to_dd_subdomain_part(
-                    self.grid, self.subdomain)
         self.subdomain_rt_space = self._subdomain_rt_spaces[self.subdomain]
         if self.subdomain not in self._matrices:
             diffusive_flux_bb_product = make_diffusive_flux_bb_product(
@@ -370,10 +371,8 @@ class DiffusiveFluxOperatorBB(EstimatorOperatorBase):
     def apply2(self, V, U, mu=None):
         assert V in self.range and U in self.source
 
-        reconstructed_vh_jj_on_subdomain = self.matrix.range.make_array(
-                [self.subdomain_rt_space.restrict(v.impl) for v in V._list])
-        reconstructed_uh_kk_on_subdomain = self.matrix.source.make_array(
-                [self.subdomain_rt_space.restrict(u.impl) for u in U._list])
+        reconstructed_vh_jj_on_subdomain = V._blocks[self.grid.neighborhood_of(self.jj).index(self.subdomain)]
+        reconstructed_uh_kk_on_subdomain = U._blocks[self.grid.neighborhood_of(self.kk).index(self.subdomain)]
 
         return self.matrix.apply2(reconstructed_vh_jj_on_subdomain, reconstructed_uh_kk_on_subdomain)
 
@@ -407,8 +406,7 @@ class DiffusiveFluxOperatorAB(EstimatorOperatorBase):
     def apply2(self, V, U, mu=None):
         assert V in self.range and U in self.source
 
-        reconstructed_uh_kk_on_subdomain = self.matrix.source.make_array(
-                [self.subdomain_rt_space.restrict(u.impl) for u in U._list])
+        reconstructed_uh_kk_on_subdomain = U._blocks[self.grid.neighborhood_of(self.kk).index(self.subdomain)]
 
         return self.matrix.apply2(V, reconstructed_uh_kk_on_subdomain)
 
@@ -855,13 +853,13 @@ def discretize(grid_and_problem_data):
                                                                 source_id='domain_{}'.format(ii),
                                                                 range_id='domain_{}'.format(ii))
         # divergence operator
-        local_rt_space = global_rt_space.restrict_to_dd_subdomain_part(grid, ii)
-        local_div_op = make_divergence_matrix_operator_on_subdomain(grid, ii, local_dg_space, local_rt_space)
-        local_div_op.assemble()
-        operators['local_divergence_{}'.format(ii)] = DuneXTMatrixOperator(local_div_op.matrix(),
-                                                                           source_id='RT_{}'.format(ii),
-                                                                           range_id='domain_{}'.format(ii),
-                                                                           name='local_divergence_{}'.format(ii))
+        # local_rt_space = global_rt_space.restrict_to_dd_subdomain_part(grid, ii)
+        # local_div_op = make_divergence_matrix_operator_on_subdomain(grid, ii, local_dg_space, local_rt_space)
+        # local_div_op.assemble()
+        # operators['local_divergence_{}'.format(ii)] = DuneXTMatrixOperator(local_div_op.matrix(),
+        #                                                                    source_id='RT_{}'.format(ii),
+        #                                                                    range_id='domain_{}'.format(ii),
+        #                                                                    name='local_divergence_{}'.format(ii))
 
     # assemble error estimator
     for ii in range(grid.num_subdomains):
