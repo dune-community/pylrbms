@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import numpy as np
+import time
 
 from pymor.core.exceptions import ExtensionError
 
@@ -61,11 +62,15 @@ for mu in d.parameter_space.sample_uniformly(2)[:5]:
 UU = reductor.reconstruct(u)
 print((U - UU).l2_norm() / U.l2_norm())
 
+tic = time.time()
 u = rd.solve(mu)
+print('red solve time: ', time.time() - tic)
 
 print('estimating reduced error ', end='', flush=True)
 
+tic = time.time()
 eta, (local_eta_nc, local_eta_r, local_eta_df), _ = rd.estimate(u, mu=mu, decompose=True)
+print('red est time: ', time.time() - tic)
 
 print('')
 print('  nonconformity indicator:  {} (should be 1.66e-01)'.format(np.linalg.norm(local_eta_nc)))
