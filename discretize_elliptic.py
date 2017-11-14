@@ -1,7 +1,3 @@
-#!/usr/bin/env python
-
-from itertools import product
-
 import numpy as np
 
 from dune.xt.grid import (
@@ -17,15 +13,13 @@ from dune.xt.la import (
 )
 from dune.gdt import (
     RS2017_apply_diffusive_flux_reconstruction_in_neighborhood as apply_diffusive_flux_reconstruction_in_neighborhood,
-    RS2017_make_residual_part_vector_functional_on_subdomain as make_residual_part_vector_functional_on_subdomain,
-    RS2017_make_Hdiv_semi_product_matrix_operator_on_subdomain as make_Hdiv_semi_product_matrix_operator_on_subdomain,
     RS2017_make_diffusive_flux_aa_product_matrix_operator_on_subdomain as make_diffusive_flux_aa_product,
     RS2017_make_diffusive_flux_ab_product_matrix_operator_on_subdomain as make_diffusive_flux_ab_product,
     RS2017_make_diffusive_flux_bb_product_matrix_operator_on_subdomain as make_diffusive_flux_bb_product,
     RS2017_apply_l2_product as apply_l2_product,
     RS2017_make_elliptic_matrix_operator_on_subdomain as make_local_elliptic_matrix_operator,
     RS2017_make_elliptic_swipdg_matrix_operator_on_neighborhood as make_elliptic_swipdg_matrix_operator_on_neighborhood,
-    RS2017_make_elliptic_swipdg_vector_functional_on_neighborhood as make_elliptic_swipdg_vector_functional_on_neighborhood,
+    RS2017_make_elliptic_swipdg_vector_functional_on_neighborhood as make_elliptic_swipdg_vector_functional_on_neighborhood,  # NOQA
     RS2017_make_l2_vector_functional_on_neighborhood as make_l2_vector_functional_on_neighborhood,
     RS2017_make_neighborhood_system_assembler as make_neighborhood_system_assembler,
     RS2017_make_penalty_product_matrix_operator_on_subdomain as make_penalty_product_matrix_operator,
@@ -46,16 +40,16 @@ from dune.gdt import (
     project as dune_project
 )
 
-from pymor.basic import *
 from pymor.bindings.dunegdt import DuneGDTVisualizer
 from pymor.bindings.dunext import DuneXTMatrixOperator, DuneXTVectorSpace
-from pymor.core.exceptions import ExtensionError
 from pymor.core.interfaces import ImmutableInterface
 from pymor.core.logger import getLogger
+from pymor.discretizations.basic import StationaryDiscretization
 from pymor.operators.basic import OperatorBase
-from pymor.operators.block import BlockOperator, BlockDiagonalOperator, BlockProjectionOperator, BlockRowOperator, BlockColumnOperator
+from pymor.operators.block import BlockOperator, BlockDiagonalOperator, BlockProjectionOperator, BlockRowOperator
+from pymor.operators.constructions import LincombOperator, VectorFunctional, Concatenation
 from pymor.parameters.functionals import ProductParameterFunctional
-from pymor.reductors.system import GenericRBSystemReductor
+from pymor.parameters.spaces import CubicParameterSpace
 from pymor.vectorarrays.block import BlockVectorSpace
 
 
@@ -84,7 +78,8 @@ class OswaldInterpolationErrorOperator(OperatorBase):
                 subdomain_uh_with_neighborhood_support = make_discrete_function(
                     ii_neighborhood_space,
                     ii_neighborhood_space.project_onto_neighborhood(
-                        [U._list[u_i].impl if nn == self.subdomain else Vector(self.block_space.local_space(nn).size(), 0.)
+                        [U._list[u_i].impl if nn == self.subdomain else
+                         Vector(self.block_space.local_space(nn).size(), 0.)
                          for nn in ii_neighborhood],
                         ii_neighborhood
                     )
@@ -104,7 +99,8 @@ class OswaldInterpolationErrorOperator(OperatorBase):
                 local_sizes = np.array([ii_neighborhood_space.local_space(nn).size() for nn in ii_neighborhood])
                 offsets = np.hstack(([0], np.cumsum(local_sizes)))
                 ind = ii_neighborhood.index(ii)
-                result._blocks[i_ii]._list[0].data[:] -= np.frombuffer(interpolated_u_vector)[offsets[ind]:offsets[ind+1]]
+                result._blocks[i_ii]._list[0].data[:] -= \
+                    np.frombuffer(interpolated_u_vector)[offsets[ind]:offsets[ind+1]]
             results.append(result)
 
         return results
@@ -127,9 +123,11 @@ class FluxReconstructionOperator(OperatorBase):
 
         self.source = solution_space.subspaces[subdomain]
         vector_type = solution_space.subspaces[0].vector_type
-        self.range = BlockVectorSpace([DuneXTVectorSpace(vector_type, subdomain_rt_spaces[ii].size(), 'LOCALRT_' + str(ii))
-                                       for ii in self.grid.neighborhood_of(subdomain)],
-                                      'RT_{}'.format(subdomain))
+        self.range = BlockVectorSpace(
+            [DuneXTVectorSpace(vector_type, subdomain_rt_spaces[ii].size(), 'LOCALRT_' + str(ii))
+             for ii in self.grid.neighborhood_of(subdomain)],
+            'RT_{}'.format(subdomain)
+        )
 
     def apply(self, U, mu=None):
         assert U in self.source
@@ -139,7 +137,8 @@ class FluxReconstructionOperator(OperatorBase):
                 make_discrete_function(
                     self.block_space,
                     self.block_space.project_onto_neighborhood(
-                        [U._list[u_i].impl if nn == self.subdomain else Vector(self.block_space.local_space(nn).size(), 0.)
+                        [U._list[u_i].impl if nn == self.subdomain else
+                         Vector(self.block_space.local_space(nn).size(), 0.)
                          for nn in range(self.grid.num_subdomains)],
                         [nn for nn in range(self.grid.num_subdomains)]
                     )
@@ -152,7 +151,8 @@ class FluxReconstructionOperator(OperatorBase):
                 subdomain_uhs_with_global_support,
                 reconstructed_uh_kk_with_global_support)
 
-            blocks = [s.make_array([self.subdomain_rt_spaces[ii].restrict(reconstructed_uh_kk_with_global_support.vector_copy())])
+            blocks = [s.make_array([self.subdomain_rt_spaces[ii].restrict(
+                                        reconstructed_uh_kk_with_global_support.vector_copy())])  # NOQA
                       for s, ii in zip(self.range.subspaces, self.grid.neighborhood_of(self.subdomain))]
             result.append(self.range.make_array(blocks))
 
@@ -160,7 +160,6 @@ class FluxReconstructionOperator(OperatorBase):
 
 
 class Estimator(ImmutableInterface):
-
 
     def __init__(self, min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs, mu_bar, mu_hat,
                  flux_reconstruction, oswald_interpolation_error):
@@ -208,17 +207,16 @@ class Estimator(ImmutableInterface):
         local_eta_df = np.sqrt(local_eta_df)
 
         eta = 0.
-        eta +=     np.sqrt(gamma_mu_mu_bar)  * np.linalg.norm(local_eta_nc)
+        eta += np.sqrt(gamma_mu_mu_bar)      * np.linalg.norm(local_eta_nc)
         eta += (1./np.sqrt(alpha_mu_mu_hat)) * np.linalg.norm(local_eta_r + local_eta_df)
-        eta *=  1./np.sqrt(alpha_mu_mu_bar)
+        eta *= 1./np.sqrt(alpha_mu_mu_bar)
 
         if decompose:
-            local_indicators = np.zeros(self.num_subdomains)
-            for ii in range(self.num_subdomains):
-                local_indicators[ii] = (2./alpha_mu_mu_bar) * (
-                               gamma_mu_mu_bar * local_eta_nc[ii]**2
-                        + (1./alpha_mu_mu_hat) * (local_eta_r[ii] + local_eta_df[ii])**2)
-
+            local_indicators = np.array(
+                [(2./alpha_mu_mu_bar) * (gamma_mu_mu_bar * local_eta_nc[ii]**2 +
+                                         (1./alpha_mu_mu_hat) * (local_eta_r[ii] + local_eta_df[ii])**2)
+                 for ii in range(self.num_subdomains)]
+            )
             return eta, (local_eta_nc, local_eta_r, local_eta_df), local_indicators
         else:
             return eta
@@ -259,7 +257,7 @@ class DuneDiscretizationBase:
             dune_local_space = self.visualizer.space.local_space(subdomain)
             tmp_discrete_function = make_discrete_function(dune_local_space)
             for expression in ('x[0]', 'x[1]', 'x[0]*x[1]'):
-                func = make_expression_function_1x1(grid, 'x', expression, order=2)
+                func = make_expression_function_1x1(self.grid, 'x', expression, order=2)
                 dune_project(func, tmp_discrete_function)
                 U.append(local_space.make_array([tmp_discrete_function.vector_copy()]))
 
@@ -287,7 +285,6 @@ class DuneDiscretization(DuneDiscretizationBase, StationaryDiscretization):
         return self.solution_space.from_data(
             self.global_operator.apply_inverse(self.global_rhs.as_vector(mu=mu), mu=mu).data
         )
-
 
     def solve_for_local_correction(self, subdomain, Us, mu=None):
         grid, local_boundary_info, affine_lambda, kappa, f, block_space = self.enrichment_data
@@ -334,7 +331,9 @@ class DuneDiscretization(DuneDiscretizationBase, StationaryDiscretization):
         neighborhood_assembler.assemble()
         # solve
         local_space_id = self.solution_space.subspaces[subdomain].id
-        lhs = LincombOperator([DuneXTMatrixOperator(o.matrix(), source_id=local_space_id, range_id=local_space_id) for o in ops], ops_coeffs)
+        lhs = LincombOperator([DuneXTMatrixOperator(o.matrix(), source_id=local_space_id, range_id=local_space_id)
+                               for o in ops],
+                              ops_coeffs)
         rhs = LincombOperator([VectorFunctional(lhs.range.make_array([v.vector()])) for v in funcs], funcs_coeffs)
         correction = lhs.apply_inverse(rhs.as_source_array(mu), mu=mu)
         assert len(correction) == 1
@@ -343,7 +342,8 @@ class DuneDiscretization(DuneDiscretizationBase, StationaryDiscretization):
         local_starts = [int(np.sum(local_sizes[:nn])) for nn in range(len(local_sizes))]
         local_starts.append(neighborhood_space.mapper.size)
         localized_corrections_as_np = np.array(correction._list[0].impl, copy=False)
-        localized_corrections_as_np = [localized_corrections_as_np[local_starts[nn]:local_starts[nn+1]] for nn in range(len(local_sizes))]
+        localized_corrections_as_np = [localized_corrections_as_np[local_starts[nn]:local_starts[nn+1]]
+                                       for nn in range(len(local_sizes))]
         subdomain_index_in_neighborhood = np.where(np.array(list(neighborhood)) == subdomain)[0]
         assert len(subdomain_index_in_neighborhood) == 1
         subdomain_index_in_neighborhood = subdomain_index_in_neighborhood[0]
@@ -354,19 +354,17 @@ class DuneDiscretization(DuneDiscretizationBase, StationaryDiscretization):
 
 
 def discretize(grid_and_problem_data):
+
+    ################ Setup
+
     logger = getLogger('discretize_elliptic.discretize_block_SWIPDG')
     logger.info('discretizing ... ')
 
-    grid, boundary_info, inner_boundary_id = (grid_and_problem_data['grid'],
-                                              grid_and_problem_data['boundary_info'],
-                                              grid_and_problem_data['inner_boundary_id'])
-    local_all_dirichlet_boundary_info = make_subdomain_boundary_info(grid, {'type': 'xt.grid.boundaryinfo.alldirichlet'})
+    grid, boundary_info = grid_and_problem_data['grid'], grid_and_problem_data['boundary_info']
+    local_all_dirichlet_boundary_info = make_subdomain_boundary_info(
+        grid, {'type': 'xt.grid.boundaryinfo.alldirichlet'}
+    )
     local_all_neumann_boundary_info = make_subdomain_boundary_info(grid, {'type': 'xt.grid.boundaryinfo.allneumann'})
-    neighborhood_boundary_info = make_subdomain_boundary_info(
-        grid,
-        {'type': 'xt.grid.boundaryinfo.boundarysegmentindexbased',
-         'default': 'dirichlet',
-         'neumann': '[{} {}]'.format(inner_boundary_id, inner_boundary_id+1)})
 
     affine_lambda, kappa, f = (grid_and_problem_data['lambda'],
                                grid_and_problem_data['kappa'],
@@ -377,6 +375,9 @@ def discretize(grid_and_problem_data):
                                         grid_and_problem_data['parameter_range'])
 
     block_space = make_block_space(grid)
+    global_rt_space = make_rt_space(grid)
+    subdomain_rt_spaces = [global_rt_space.restrict_to_dd_subdomain_part(grid, ii)
+                           for ii in range(grid.num_subdomains)]
 
     local_patterns = [block_space.local_space(ii).compute_pattern('face_and_volume')
                       for ii in range(block_space.num_blocks)]
@@ -394,6 +395,8 @@ def discretize(grid_and_problem_data):
     boundary_patterns = {}
     for ii in grid.boundary_subdomains():
         boundary_patterns[ii] = block_space.local_space(ii).compute_pattern('face_and_volume')
+
+    ################ Assemble LHS and RHS
 
     def discretize_lhs_for_lambda(lambda_):
         local_matrices = [None]*grid.num_subdomains
@@ -488,7 +491,8 @@ def discretize(grid_and_problem_data):
             block_space.mapper.copy_local_to_global(local_matrices[ii], local_patterns[ii], ii, system_matrix)
             block_space.mapper.copy_local_to_global(local_vectors[ii], ii, rhs_vector)
             if ii in grid.boundary_subdomains():
-                block_space.mapper.copy_local_to_global(boundary_matrices[ii], boundary_patterns[ii], ii, ii, system_matrix)
+                block_space.mapper.copy_local_to_global(boundary_matrices[ii], boundary_patterns[ii],
+                                                        ii, ii, system_matrix)
             for jj in grid.neighboring_subdomains(ii):
                 if ii < jj:  # Assemble primally (visit each coupling only once).
                     block_space.mapper.copy_local_to_global(coupling_matrices_in_in[(ii, jj)],
@@ -550,44 +554,38 @@ def discretize(grid_and_problem_data):
     ops, block_ops, rhss, block_rhss = zip(*(discretize_lhs_for_lambda(l) for l in affine_lambda['functions']))
     global_rhs = rhss[0]
     block_rhs = block_rhss[0]
-
     lambda_coeffs = affine_lambda['coefficients']
     global_operator = LincombOperator(ops, lambda_coeffs)
     block_op = LincombOperator(block_ops, lambda_coeffs, name='lhs')
+    solution_space = block_op.source
+
+    ################ Assemble interpolation and reconstruction operators
+
+    # Oswald interpolation error operator
+    oi_op = BlockDiagonalOperator([OswaldInterpolationErrorOperator(ii, block_op.source, grid, block_space)
+                                   for ii in range(grid.num_subdomains)],
+                                  name='oswald_interpolation_error')
+
+    # Flux reconstruction operator
+    fr_op = LincombOperator(
+        [BlockDiagonalOperator([FluxReconstructionOperator(ii, block_op.source, grid, block_space, global_rt_space,
+                                                           subdomain_rt_spaces, lambda_xi, kappa)
+                                for ii in range(grid.num_subdomains)])
+         for lambda_xi in affine_lambda['functions']],
+        lambda_coeffs,
+        name='flux_reconstruction'
+    )
+
+    ################ Assemble inner products and error estimator operators
 
     operators = {}
-    global_rt_space = make_rt_space(grid)
-    subdomain_rt_spaces = [global_rt_space.restrict_to_dd_subdomain_part(grid, ii)
-                           for ii in range(grid.num_subdomains)]
 
-    def assemble_oswald_interpolation_error():
-        oi_ops = [OswaldInterpolationErrorOperator(ii, block_op.source, grid, block_space)
-                  for ii in range(grid.num_subdomains)]
-        return BlockDiagonalOperator(oi_ops, name='oswald_interpolation_error')
-
-    oi_op = assemble_oswald_interpolation_error()
-
-    def assemble_flux_reconstruction(lambda_xi):
-        fr_ops = [FluxReconstructionOperator(ii, block_op.source, grid, block_space, global_rt_space,
-                                             subdomain_rt_spaces, lambda_xi, kappa)
-                  for ii in range(grid.num_subdomains)]
-        return BlockDiagonalOperator(fr_ops)
-
-    fr_op = LincombOperator([assemble_flux_reconstruction(lambda_xi) for lambda_xi in affine_lambda['functions']],
-                            lambda_coeffs, name='flux_reconstruction')
-
-    spaces = block_op.source.subspaces
-
-    local_divergence_operators = []
-    local_l2_products = []
-    local_domain_ops = []
-    local_rt_ops = []
-    local_oi_ops = []
-    local_est_rhs_functionals = []
-    local_elliptic_products = []
-
-    # assemble local products
     for ii in range(grid.num_subdomains):
+
+        neighborhood = grid.neighborhood_of(ii)
+
+        ################ Assemble local inner products
+
         local_dg_space = block_space.local_space(ii)
         # we want a larger pattern to allow for axpy with other matrices
         tmp_local_matrix = Matrix(local_dg_space.size(),
@@ -618,48 +616,58 @@ def discretize(grid_and_problem_data):
                                                 for op in local_energy_product_ops],
                                                local_energy_product_coeffs,
                                                name=local_energy_product_name)
-        operators[local_energy_product_name] = local_energy_product.assemble(mu_bar).with_(
-                name=local_energy_product_name)
-        local_l2_product_name = 'local_l2_product_{}'.format(ii)
-        operators[local_l2_product_name] = DuneXTMatrixOperator(local_l2_product.matrix(),
-                                                                source_id='domain_{}'.format(ii),
-                                                                range_id='domain_{}'.format(ii))
-        local_l2_products.append(operators[local_l2_product_name])
-        # divergence operator
-        local_rt_space = global_rt_space.restrict_to_dd_subdomain_part(grid, ii)
-        local_div_op = make_divergence_matrix_operator_on_subdomain(grid, ii, local_dg_space, local_rt_space)
-        local_div_op.assemble()
-        local_divergence_operators.append(DuneXTMatrixOperator(local_div_op.matrix(),
-                                          source_id='LOCALRT_{}'.format(ii),
-                                          range_id='domain_{}'.format(ii),
-                                          name='local_divergence_{}'.format(ii)))
+        operators[local_energy_product_name] = \
+            local_energy_product.assemble(mu_bar).with_(name=local_energy_product_name)
 
-        lrt_ops = np.full(grid.num_subdomains, None)
-        neighborhood = grid.neighborhood_of(ii)
+        local_l2_product = DuneXTMatrixOperator(local_l2_product.matrix(),
+                                                source_id='domain_{}'.format(ii),
+                                                range_id='domain_{}'.format(ii))
+        operators['local_l2_product_{}'.format(ii)] = local_l2_product
+
+        # assemble local elliptic product
+        matrix = make_local_elliptic_matrix_operator(grid, ii,
+                                                     block_space.local_space(ii),
+                                                     lambda_bar, kappa)
+        matrix.assemble()
+        local_elliptic_product = DuneXTMatrixOperator(matrix.matrix(),
+                                                      range_id='domain_{}'.format(ii),
+                                                      source_id='domain_{}'.format(ii))
+
+        ################ Assemble local to global projections
+
+        # assemble projection (solution space) ->  (ii space)
+        local_projection = BlockProjectionOperator(block_op.source, ii)
+
+        # assemble projection (RT spaces on neighborhoods of subdomains) ->  (local RT space on ii)
+        ops = np.full(grid.num_subdomains, None)
         for kk in neighborhood:
             component = grid.neighborhood_of(kk).index(ii)
             assert fr_op.range.subspaces[kk].subspaces[component].id == 'LOCALRT_{}'.format(ii)
-            lrt_ops[kk] = BlockProjectionOperator(fr_op.range.subspaces[kk], component)
-        lrt_op = BlockRowOperator(lrt_ops, source_spaces=fr_op.range.subspaces, name='localrt_{}'.format(ii))
-        local_domain_ops.append(BlockProjectionOperator(block_op.source, ii))
+            ops[kk] = BlockProjectionOperator(fr_op.range.subspaces[kk], component)
+        local_rt_projection = BlockRowOperator(ops, source_spaces=fr_op.range.subspaces,
+                                               name='local_rt_projection_{}'.format(ii))
 
-        lrt_ops = np.full(grid.num_subdomains, None)
-        neighborhood = grid.neighborhood_of(ii)
-        for kk in neighborhood:
-            component = grid.neighborhood_of(kk).index(ii)
-            assert fr_op.range.subspaces[kk].subspaces[component].id == 'LOCALRT_{}'.format(ii)
-            lrt_ops[kk] = BlockProjectionOperator(fr_op.range.subspaces[kk], component)
-        lrt_op = BlockRowOperator(lrt_ops, source_spaces=fr_op.range.subspaces, name='localrt_{}'.format(ii))
-        local_rt_ops.append(lrt_op)
-
-        loi_ops = np.full(grid.num_subdomains, None)
+        # assemble projection (OI spaces on neighborhoods of subdomains) ->  (ii space)
+        ops = np.full(grid.num_subdomains, None)
         for kk in neighborhood:
             component = grid.neighborhood_of(kk).index(ii)
             assert oi_op.range.subspaces[kk].subspaces[component].id == 'domain_{}'.format(ii)
-            loi_ops[kk] = BlockProjectionOperator(oi_op.range.subspaces[kk], component)
-        loi_op = BlockRowOperator(loi_ops, source_spaces=oi_op.range.subspaces, name='localoi_{}'.format(ii))
-        local_oi_ops.append(loi_op)
+            ops[kk] = BlockProjectionOperator(oi_op.range.subspaces[kk], component)
+        local_oi_projection = BlockRowOperator(ops, source_spaces=oi_op.range.subspaces,
+                                               name='local_oi_projection_{}'.format(ii))
 
+        ################ Assemble additional operators for error estimation
+
+        # assemble local divergence operator
+        local_rt_space = global_rt_space.restrict_to_dd_subdomain_part(grid, ii)
+        local_div_op = make_divergence_matrix_operator_on_subdomain(grid, ii, local_dg_space, local_rt_space)
+        local_div_op.assemble()
+        local_div_op = DuneXTMatrixOperator(local_div_op.matrix(),
+                                            source_id='LOCALRT_{}'.format(ii),
+                                            range_id='domain_{}'.format(ii),
+                                            name='local_divergence_{}'.format(ii))
+
+        # assemble rhs functional on ii for residual estimator
         est_rhs_vector  = Vector(block_space.local_space(ii).size())
         l2_functional = make_l2_volume_vector_functional(f, est_rhs_vector,
                                                          block_space.local_space(ii),
@@ -667,31 +675,35 @@ def discretize(grid_and_problem_data):
         local_assembler = make_system_assembler(block_space.local_space(ii))
         local_assembler.append(l2_functional)
         local_assembler.assemble()
-        local_est_rhs_functionals.append(VectorFunctional(spaces[ii].make_array([est_rhs_vector])))
+        local_rhs_functional_for_estimator = VectorFunctional(solution_space.subspaces[ii].make_array([est_rhs_vector]))
 
-        matrix = make_local_elliptic_matrix_operator(grid, ii,
-                                                     block_space.local_space(ii),
-                                                     lambda_bar, kappa)
-        matrix.assemble()
-        matrix = matrix.matrix()
-        local_elliptic_products.append(DuneXTMatrixOperator(matrix,
-                                                            range_id='domain_{}'.format(ii),
-                                                            source_id='domain_{}'.format(ii)))
+        ################ Assemble error estimator eoperators -- Nonconformity
 
+        operators['nc_{}'.format(ii)] = \
+            Concatenation(local_oi_projection.T, Concatenation(local_elliptic_product, local_oi_projection),
+                          name='nonconformity_{}'.format(ii))
 
-    # assemble error estimator
-    for ii in range(grid.num_subdomains):
+        ################ Assemble error estimator eoperators -- Residual
 
-        neighborhood = grid.neighborhood_of(ii)
+        local_div = Concatenation(local_div_op, local_rt_projection)
+
+        operators['r1_{}'.format(ii)] = \
+            Concatenation(local_rhs_functional_for_estimator, local_div, name='r1_{}'.format(ii))
+
+        operators['r2_{}'.format(ii)] = \
+            Concatenation(local_div.T, Concatenation(local_l2_product, local_div), name='r2_{}'.format(ii))
+
+        ################ Assemble error estimator eoperators -- Diffusive flux
 
         def assemble_estimator_diffusive_flux_aa(lambda_xi, lambda_xi_prime):
             diffusive_flux_aa_product = make_diffusive_flux_aa_product(
-                    grid, ii,
-                    block_space.local_space(ii),
-                    lambda_bar,
-                    lambda_u=lambda_xi, lambda_v=lambda_xi_prime,
-                    kappa=kappa,
-                    over_integrate=2)
+                grid, ii,
+                block_space.local_space(ii),
+                lambda_bar,
+                lambda_u=lambda_xi, lambda_v=lambda_xi_prime,
+                kappa=kappa,
+                over_integrate=2
+            )
             subdomain_walker = make_subdomain_walker(grid, ii)
             subdomain_walker.append(diffusive_flux_aa_product)
             subdomain_walker.walk()
@@ -700,53 +712,42 @@ def discretize(grid_and_problem_data):
                                           source_id='domain_{}'.format(ii))
             df_ops = np.full((grid.num_subdomains,) * 2, None)
             df_ops[ii, ii] = matrix
-            return BlockOperator(df_ops, range_spaces=spaces, source_spaces=spaces)
+            return BlockOperator(df_ops, range_spaces=solution_space.subspaces, source_spaces=solution_space.subspaces)
 
         def assemble_estimator_diffusive_flux_bb():
             diffusive_flux_bb_product = make_diffusive_flux_bb_product(
-                    grid, ii,
-                    subdomain_rt_spaces[ii],
-                    lambda_bar,
-                    kappa=kappa,
-                    over_integrate=2)
+                grid, ii,
+                subdomain_rt_spaces[ii],
+                lambda_bar,
+                kappa=kappa,
+                over_integrate=2
+            )
             subdomain_walker = make_subdomain_walker(grid, ii)
             subdomain_walker.append(diffusive_flux_bb_product)
             subdomain_walker.walk()
             matrix = DuneXTMatrixOperator(diffusive_flux_bb_product.matrix(),
                                           range_id='LOCALRT_{}'.format(ii),
                                           source_id='LOCALRT_{}'.format(ii))
-            return Concatenation(local_rt_ops[ii].T, Concatenation(matrix, local_rt_ops[ii]),
+            return Concatenation(local_rt_projection.T, Concatenation(matrix, local_rt_projection),
                                  name='diffusive_flux_bb_{}'.format(ii))
 
         def assemble_estimator_diffusive_flux_ab(lambda_xi):
             diffusive_flux_ab_product = make_diffusive_flux_ab_product(
-                    grid, ii,
-                    range_space=block_space.local_space(ii),
-                    source_space=subdomain_rt_spaces[ii],
-                    lambda_range=lambda_xi,
-                    lambda_hat=lambda_bar,
-                    kappa=kappa,
-                    over_integrate=2)
+                grid, ii,
+                range_space=block_space.local_space(ii),
+                source_space=subdomain_rt_spaces[ii],
+                lambda_range=lambda_xi,
+                lambda_hat=lambda_bar,
+                kappa=kappa,
+                over_integrate=2
+            )
             subdomain_walker = make_subdomain_walker(grid, ii)
             subdomain_walker.append(diffusive_flux_ab_product)
             subdomain_walker.walk()
             matrix = DuneXTMatrixOperator(diffusive_flux_ab_product.matrix(),
                                           range_id='domain_{}'.format(ii),
                                           source_id='LOCALRT_{}'.format(ii))
-            return Concatenation(local_domain_ops[ii].T, Concatenation(matrix, local_rt_ops[ii]))
-
-        local_div = Concatenation(local_divergence_operators[ii], local_rt_ops[ii])
-        local_oi = local_oi_ops[ii]
-
-        operators['nc_{}'.format(ii)] = \
-            Concatenation(local_oi.T, Concatenation(local_elliptic_products[ii], local_oi),
-                          name='nonconformity_{}'.format(ii))
-
-        operators['r1_{}'.format(ii)] = \
-            Concatenation(local_est_rhs_functionals[ii], local_div, name='r1_{}'.format(ii))
-
-        operators['r2_{}'.format(ii)] = \
-            Concatenation(local_div.T, Concatenation(local_l2_products[ii], local_div), name='r2_{}'.format(ii))
+            return Concatenation(local_projection.T, Concatenation(matrix, local_rt_projection))
 
         operators['df_aa_{}'.format(ii)] = LincombOperator(
             [assemble_estimator_diffusive_flux_aa(lambda_xi, lambda_xi_prime)
@@ -756,13 +757,18 @@ def discretize(grid_and_problem_data):
              for c1 in lambda_coeffs
              for c2 in lambda_coeffs],
             name='diffusive_flux_aa_{}'.format(ii))
+
         operators['df_bb_{}'.format(ii)] = assemble_estimator_diffusive_flux_bb()
+
         operators['df_ab_{}'.format(ii)] = LincombOperator(
             [assemble_estimator_diffusive_flux_ab(lambda_xi) for lambda_xi in affine_lambda['functions']],
             lambda_coeffs,
             name='diffusive_flux_ab_{}'.format(ii)
         )
 
+    ################ Finaly assembly
+
+    # instantiate error estimator
     min_diffusion_evs = np.array([min_diffusion_eigenvalue(grid, ii, lambda_hat, kappa) for ii in
                                   range(grid.num_subdomains)])
     subdomain_diameters = np.array([subdomain_diameter(grid, ii) for ii in range(grid.num_subdomains)])
@@ -771,6 +777,7 @@ def discretize(grid_and_problem_data):
     estimator = Estimator(min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs, mu_bar, mu_hat,
                           fr_op, oi_op)
 
+    # instantiate discretization
     neighborhoods = [grid.neighborhood_of(ii) for ii in range(grid.num_subdomains)]
     local_boundary_info = make_subdomain_boundary_info(grid_and_problem_data['grid'],
                                                        {'type': 'xt.grid.boundaryinfo.alldirichlet'})
