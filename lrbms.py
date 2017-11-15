@@ -1,10 +1,11 @@
 import numpy as np
 
-from pymor.reductors.system import GenericRBSystemReductor
-from pymor.operators.block import BlockDiagonalOperator
-from pymor.operators.constructions import LincombOperator
-from pymor.algorithms.system import unblock
+from pymor.algorithms.gram_schmidt import gram_schmidt
+from pymor.algorithms.system import project_system, unblock
+from pymor.operators.block import BlockDiagonalOperator, BlockOperator
+from pymor.operators.constructions import LincombOperator, ZeroOperator
 from pymor.operators.numpy import NumpyMatrixOperator
+from pymor.reductors.system import GenericRBSystemReductor
 
 
 class LRBMSReductor(GenericRBSystemReductor):
@@ -68,3 +69,35 @@ class LRBMSReductor(GenericRBSystemReductor):
         Us = [self.reconstruct_local(U, 'domain_{}'.format(sdi)) for sdi in self.d.neighborhoods[subdomain]]
         local_correction = self.d.solve_for_local_correction(subdomain, Us, mu)
         self.extend_basis_local(local_correction)
+
+
+class ParabolicLRBMSReductor(LRBMSReductor):
+
+    def _reduce(self):
+        d = self.d
+
+        if not isinstance(d.operator, LincombOperator) and all(isinstance(op, BlockOperator) for op in
+                                                               d.operator.operators):
+            raise NotImplementedError
+
+        residual_source_bases = [self.bases[ss.id] for ss in d.operator.source.subspaces]
+        residual_range_bases = []
+        for ii in range(len(residual_source_bases)):
+            b = residual_source_bases[ii].empty()
+            for op in d.operator.operators:
+                for o in op._blocks[ii, :]:
+                    if not isinstance(o, ZeroOperator):
+                        b.append(o.apply(self.bases[o.source.id]))
+            p = d.l2_product._blocks[ii, ii]
+            b = p.apply_inverse(b)
+            gram_schmidt(b, product=p, copy=False)
+            residual_range_bases.append(b)
+
+        residual_operator = project_system(d.operator, residual_range_bases, residual_source_bases)
+        residual_operator = unblock(residual_operator)
+
+        rd = super()._reduce()
+        rd = rd.with_(estimator=rd.estimator.with_(residual_operator=residual_operator,
+                                                   residual_product=None))
+
+        return rd

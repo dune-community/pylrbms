@@ -159,7 +159,7 @@ class FluxReconstructionOperator(OperatorBase):
         return result
 
 
-class Estimator(ImmutableInterface):
+class EllipticEstimator(ImmutableInterface):
 
     def __init__(self, min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs, mu_bar, mu_hat,
                  flux_reconstruction, oswald_interpolation_error):
@@ -190,8 +190,8 @@ class Estimator(ImmutableInterface):
         for ii in range(self.num_subdomains):
             local_eta_nc[ii] = d.operators['nc_{}'.format(ii)].apply2(U_o, U_o, mu=mu)
             local_eta_r[ii] += self.local_eta_rf_squared[ii]
-            local_eta_r[ii] -= 2*d.operators['r1_{}'.format(ii)].apply(U_r, mu=mu).data
-            local_eta_r[ii] += d.operators['r2_{}'.format(ii)].apply2(U_r, U_r, mu=mu)
+            local_eta_r[ii] -= 2*d.operators['r_dd_{}'.format(ii)].apply(U_r, mu=mu).data
+            local_eta_r[ii] += d.operators['r_fd_{}'.format(ii)].apply2(U_r, U_r, mu=mu)
             local_eta_df[ii] += d.operators['df_aa_{}'.format(ii)].apply2(U, U, mu=mu)
             local_eta_df[ii] += d.operators['df_bb_{}'.format(ii)].apply2(U_r, U_r, mu=mu)
             local_eta_df[ii] += 2*d.operators['df_ab_{}'.format(ii)].apply2(U, U_r, mu=mu)
@@ -579,6 +579,19 @@ def discretize(grid_and_problem_data):
     ################ Assemble inner products and error estimator operators
 
     operators = {}
+    local_projections = []
+    local_rt_projections = []
+    local_oi_projections = []
+    local_div_ops = []
+    local_rhs_functionals_for_estimator = []
+    local_l2_products = []
+    data = dict(grid=grid,
+                block_space=block_space,
+                local_projections=local_projections,
+                local_rt_projections=local_rt_projections,
+                local_oi_projections=local_oi_projections,
+                local_div_ops=local_div_ops,
+                local_rhs_functionals_for_estimator=local_rhs_functionals_for_estimator)
 
     for ii in range(grid.num_subdomains):
 
@@ -622,7 +635,7 @@ def discretize(grid_and_problem_data):
         local_l2_product = DuneXTMatrixOperator(local_l2_product.matrix(),
                                                 source_id='domain_{}'.format(ii),
                                                 range_id='domain_{}'.format(ii))
-        operators['local_l2_product_{}'.format(ii)] = local_l2_product
+        local_l2_products.append(local_l2_product)
 
         # assemble local elliptic product
         matrix = make_local_elliptic_matrix_operator(grid, ii,
@@ -637,6 +650,7 @@ def discretize(grid_and_problem_data):
 
         # assemble projection (solution space) ->  (ii space)
         local_projection = BlockProjectionOperator(block_op.source, ii)
+        local_projections.append(local_projection)
 
         # assemble projection (RT spaces on neighborhoods of subdomains) ->  (local RT space on ii)
         ops = np.full(grid.num_subdomains, None)
@@ -646,6 +660,7 @@ def discretize(grid_and_problem_data):
             ops[kk] = BlockProjectionOperator(fr_op.range.subspaces[kk], component)
         local_rt_projection = BlockRowOperator(ops, source_spaces=fr_op.range.subspaces,
                                                name='local_rt_projection_{}'.format(ii))
+        local_rt_projections.append(local_rt_projection)
 
         # assemble projection (OI spaces on neighborhoods of subdomains) ->  (ii space)
         ops = np.full(grid.num_subdomains, None)
@@ -655,6 +670,7 @@ def discretize(grid_and_problem_data):
             ops[kk] = BlockProjectionOperator(oi_op.range.subspaces[kk], component)
         local_oi_projection = BlockRowOperator(ops, source_spaces=oi_op.range.subspaces,
                                                name='local_oi_projection_{}'.format(ii))
+        local_oi_projections.append(local_oi_projection)
 
         ################ Assemble additional operators for error estimation
 
@@ -666,6 +682,7 @@ def discretize(grid_and_problem_data):
                                             source_id='LOCALRT_{}'.format(ii),
                                             range_id='domain_{}'.format(ii),
                                             name='local_divergence_{}'.format(ii))
+        local_div_ops.append(local_div_op)
 
         # assemble rhs functional on ii for residual estimator
         est_rhs_vector  = Vector(block_space.local_space(ii).size())
@@ -676,6 +693,7 @@ def discretize(grid_and_problem_data):
         local_assembler.append(l2_functional)
         local_assembler.assemble()
         local_rhs_functional_for_estimator = VectorFunctional(solution_space.subspaces[ii].make_array([est_rhs_vector]))
+        local_rhs_functionals_for_estimator.append(local_rhs_functional_for_estimator)
 
         ################ Assemble error estimator eoperators -- Nonconformity
 
@@ -687,10 +705,10 @@ def discretize(grid_and_problem_data):
 
         local_div = Concatenation(local_div_op, local_rt_projection)
 
-        operators['r1_{}'.format(ii)] = \
+        operators['r_dd_{}'.format(ii)] = \
             Concatenation(local_rhs_functional_for_estimator, local_div, name='r1_{}'.format(ii))
 
-        operators['r2_{}'.format(ii)] = \
+        operators['r_fd_{}'.format(ii)] = \
             Concatenation(local_div.T, Concatenation(local_l2_product, local_div), name='r2_{}'.format(ii))
 
         ################ Assemble error estimator eoperators -- Diffusive flux
@@ -774,8 +792,9 @@ def discretize(grid_and_problem_data):
     subdomain_diameters = np.array([subdomain_diameter(grid, ii) for ii in range(grid.num_subdomains)])
     local_eta_rf_squared = np.array([apply_l2_product(grid, ii, f, f, over_integrate=2) for ii in
                                      range(grid.num_subdomains)])
-    estimator = Estimator(min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs, mu_bar, mu_hat,
-                          fr_op, oi_op)
+    estimator = EllipticEstimator(min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs,
+                                  mu_bar, mu_hat, fr_op, oi_op)
+    l2_product = BlockDiagonalOperator(local_l2_products)
 
     # instantiate discretization
     neighborhoods = [grid.neighborhood_of(ii) for ii in range(grid.num_subdomains)]
@@ -788,7 +807,9 @@ def discretize(grid_and_problem_data):
                            block_op,
                            block_rhs,
                            visualizer=DuneGDTVisualizer(block_space),
-                           operators=operators, estimator=estimator)
+                           operators=operators,
+                           products={'l2': l2_product},
+                           estimator=estimator)
     d = d.with_(parameter_space=CubicParameterSpace(d.parameter_type, parameter_range[0], parameter_range[1]))
 
-    return d, block_space
+    return d, data

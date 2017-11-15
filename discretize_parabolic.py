@@ -1,15 +1,11 @@
-from dune.xt.la import IstlRowMajorSparseMatrixDouble as Matrix
-from dune.gdt import (
-        make_l2_matrix_operator,
-        make_system_assembler
-)
+import numpy as np
 
 from pymor.algorithms.timestepping import ImplicitEulerTimeStepper
 from pymor.bindings.dunext import DuneXTMatrixOperator
 from pymor.bindings.dunegdt import DuneGDTVisualizer
 from pymor.discretizations.basic import InstationaryDiscretization
 
-from discretize_elliptic import *
+from discretize_elliptic import DuneDiscretizationBase, EllipticEstimator
 from discretize_elliptic import discretize as discretize_ell
 
 
@@ -41,20 +37,53 @@ class InstationaryDuneDiscretization(DuneDiscretizationBase, InstationaryDiscret
         return self.solution_space.from_data(U.data)
 
 
+class ParabolicEstimator(EllipticEstimator):
+
+    def __init__(self, residual_operator, residual_product,
+                 min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs, mu_bar, mu_hat,
+                 flux_reconstruction, oswald_interpolation_error):
+        super().__init__(min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs, mu_bar, mu_hat,
+                         flux_reconstruction, oswald_interpolation_error)
+        self.residual_operator = residual_operator
+        self.residual_product = residual_product
+
+    def estimate(self, U, mu, discretization, decompose=False):
+        d = discretization
+        dt = d.T / d.time_stepper.nt
+
+        time_residual = self.residual_operator.apply(U[1:] - U[:-1], mu)
+        if self.residual_product:
+            time_residual = self.residual_product.apply_inverse(time_residual).pairwise_dot(time_residual)
+        else:
+            time_residual = time_residual.l2_norm2()
+        time_residual *= dt / 3
+        time_residual = np.sqrt(time_residual)
+
+        return time_residual
+
+
 def discretize(grid_and_problem_data, T, nt):
-    d, block_space = discretize_ell(grid_and_problem_data)
+    d, d_data = discretize_ell(grid_and_problem_data)
+    block_space = d_data['block_space']
     # assemble global L2 product
-    l2_mat = d.global_operator.operators[0].matrix.copy() # to ensure matching pattern
+    l2_mat = d.global_operator.operators[0].matrix.copy()  # to ensure matching pattern
     l2_mat.scal(0.)
     for ii in range(block_space.num_blocks):
-        local_l2_product = d.operators['local_l2_product_{}'.format(ii)]
+        local_l2_product = d.l2_product._blocks[ii, ii]
         block_space.mapper.copy_local_to_global(local_l2_product.matrix,
                                                 local_l2_product.matrix.pattern(),
                                                 ii,
                                                 l2_mat)
-    mass = BlockDiagonalOperator([d.operators['local_l2_product_{}'.format(ii)] for ii in range(block_space.num_blocks)])
-    ops = {k: v for k, v in d.operators.items() if not k in d.special_operators}
+    mass = d.l2_product
+    operators = {k: v for k, v in d.operators.items() if k not in d.special_operators}
     global_mass = DuneXTMatrixOperator(l2_mat)
+
+    e = d.estimator
+    estimator = ParabolicEstimator(d.operator,
+                                   d.l2_product,
+                                   e.min_diffusion_evs, e.subdomain_diameters, e.local_eta_rf_squared, e.lambda_coeffs,
+                                   e.mu_bar, e.mu_hat, e.flux_reconstruction, e.oswald_interpolation_error)
+
     d = InstationaryDuneDiscretization(d.global_operator,
                                        d.global_rhs,
                                        global_mass,
@@ -66,9 +95,9 @@ def discretize(grid_and_problem_data, T, nt):
                                        time_stepper=ImplicitEulerTimeStepper(nt=nt,
                                                                              solver_options='operator'),
                                        products=d.products,
-                                       operators=ops,
-                                       estimator=d.estimator,
+                                       operators=operators,
+                                       estimator=estimator,
                                        parameter_space=d.parameter_space,
                                        visualizer=DuneGDTVisualizer(block_space))
 
-    return d, block_space
+    return d, d_data

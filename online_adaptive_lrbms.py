@@ -45,7 +45,8 @@ grid_and_problem_data = init_grid_and_problem(config)
 grid = grid_and_problem_data['grid']
 # grid.visualize('grid', False)
 
-d, block_space = discretize(grid_and_problem_data)
+d, d_data = discretize(grid_and_problem_data)
+block_space = d_data['block_space']
 d.disable_logging()
 
 # logger.info('estimating some errors:')
