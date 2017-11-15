@@ -1,12 +1,11 @@
-import numpy as np
-
 from pymor.algorithms.timestepping import ImplicitEulerTimeStepper
 from pymor.bindings.dunext import DuneXTMatrixOperator
 from pymor.bindings.dunegdt import DuneGDTVisualizer
 from pymor.discretizations.basic import InstationaryDiscretization
 
-from discretize_elliptic import DuneDiscretizationBase, EllipticEstimator
+from discretize_elliptic import DuneDiscretizationBase
 from discretize_elliptic import discretize as discretize_ell
+from lrbms import ParabolicEstimator
 
 
 class InstationaryDuneDiscretization(DuneDiscretizationBase, InstationaryDiscretization):
@@ -35,31 +34,6 @@ class InstationaryDuneDiscretization(DuneDiscretizationBase, InstationaryDiscret
                                     initial_time=0, end_time=self.T, mu=mu, num_values=self.num_values)
 
         return self.solution_space.from_data(U.data)
-
-
-class ParabolicEstimator(EllipticEstimator):
-
-    def __init__(self, residual_operator, residual_product,
-                 min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs, mu_bar, mu_hat,
-                 flux_reconstruction, oswald_interpolation_error):
-        super().__init__(min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs, mu_bar, mu_hat,
-                         flux_reconstruction, oswald_interpolation_error)
-        self.residual_operator = residual_operator
-        self.residual_product = residual_product
-
-    def estimate(self, U, mu, discretization, decompose=False):
-        d = discretization
-        dt = d.T / d.time_stepper.nt
-
-        time_residual = self.residual_operator.apply(U[1:] - U[:-1], mu)
-        if self.residual_product:
-            time_residual = self.residual_product.apply_inverse(time_residual).pairwise_dot(time_residual)
-        else:
-            time_residual = time_residual.l2_norm2()
-        time_residual *= dt / 3
-        time_residual = np.sqrt(time_residual)
-
-        return time_residual
 
 
 def discretize(grid_and_problem_data, T, nt):

@@ -53,6 +53,9 @@ from pymor.parameters.spaces import CubicParameterSpace
 from pymor.vectorarrays.block import BlockVectorSpace
 
 
+from lrbms import EllipticEstimator
+
+
 class OswaldInterpolationErrorOperator(OperatorBase):
 
     linear = True
@@ -156,87 +159,6 @@ class FluxReconstructionOperator(OperatorBase):
                       for s, ii in zip(self.range.subspaces, self.grid.neighborhood_of(self.subdomain))]
             result.append(self.range.make_array(blocks))
 
-        return result
-
-
-class EllipticEstimator(ImmutableInterface):
-
-    def __init__(self, min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs, mu_bar, mu_hat,
-                 flux_reconstruction, oswald_interpolation_error):
-        self.min_diffusion_evs = min_diffusion_evs
-        self.subdomain_diameters = subdomain_diameters
-        self.local_eta_rf_squared = local_eta_rf_squared
-        self.lambda_coeffs = lambda_coeffs
-        self.mu_bar = mu_bar
-        self.mu_hat = mu_hat
-        self.flux_reconstruction = flux_reconstruction
-        self.oswald_interpolation_error = oswald_interpolation_error
-        self.num_subdomains = len(subdomain_diameters)
-
-    def estimate(self, U, mu, discretization, decompose=False):
-        d = discretization
-
-        alpha_mu_mu_bar = self.alpha(self.lambda_coeffs, mu, self.mu_bar)
-        gamma_mu_mu_bar = self.gamma(self.lambda_coeffs, mu, self.mu_bar)
-        alpha_mu_mu_hat = self.alpha(self.lambda_coeffs, mu, self.mu_hat)
-
-        local_eta_nc = np.zeros(self.num_subdomains)
-        local_eta_r = np.zeros(self.num_subdomains)
-        local_eta_df = np.zeros(self.num_subdomains)
-
-        U_r = self.flux_reconstruction.apply(U, mu=mu)
-        U_o = self.oswald_interpolation_error.apply(U)
-
-        for ii in range(self.num_subdomains):
-            local_eta_nc[ii] = d.operators['nc_{}'.format(ii)].apply2(U_o, U_o, mu=mu)
-            local_eta_r[ii] += self.local_eta_rf_squared[ii]
-            local_eta_r[ii] -= 2*d.operators['r_dd_{}'.format(ii)].apply(U_r, mu=mu).data
-            local_eta_r[ii] += d.operators['r_fd_{}'.format(ii)].apply2(U_r, U_r, mu=mu)
-            local_eta_df[ii] += d.operators['df_aa_{}'.format(ii)].apply2(U, U, mu=mu)
-            local_eta_df[ii] += d.operators['df_bb_{}'.format(ii)].apply2(U_r, U_r, mu=mu)
-            local_eta_df[ii] += 2*d.operators['df_ab_{}'.format(ii)].apply2(U, U_r, mu=mu)
-
-            # eta r, scale
-            poincaree_constant = 1./(np.pi**2)
-            min_diffusion_ev = self.min_diffusion_evs[ii]
-            subdomain_h = self.subdomain_diameters[ii]
-            local_eta_r[ii] *= (poincaree_constant/min_diffusion_ev) * subdomain_h**2
-
-        local_eta_nc = np.sqrt(local_eta_nc)
-        local_eta_r = np.sqrt(local_eta_r)
-        local_eta_df = np.sqrt(local_eta_df)
-
-        eta = 0.
-        eta += np.sqrt(gamma_mu_mu_bar)      * np.linalg.norm(local_eta_nc)
-        eta += (1./np.sqrt(alpha_mu_mu_hat)) * np.linalg.norm(local_eta_r + local_eta_df)
-        eta *= 1./np.sqrt(alpha_mu_mu_bar)
-
-        if decompose:
-            local_indicators = np.array(
-                [(2./alpha_mu_mu_bar) * (gamma_mu_mu_bar * local_eta_nc[ii]**2 +
-                                         (1./alpha_mu_mu_hat) * (local_eta_r[ii] + local_eta_df[ii])**2)
-                 for ii in range(self.num_subdomains)]
-            )
-            return eta, (local_eta_nc, local_eta_r, local_eta_df), local_indicators
-        else:
-            return eta
-
-    def alpha(self, thetas, mu, mu_bar):
-        result = np.inf
-        for theta in thetas:
-            theta_mu = theta.evaluate(mu)
-            theta_mu_bar = theta.evaluate(mu_bar)
-            assert theta_mu/theta_mu_bar > 0
-            result = np.min((result, theta_mu/theta_mu_bar))
-            return result
-
-    def gamma(self, thetas, mu, mu_bar):
-        result = -np.inf
-        for theta in thetas:
-            theta_mu = theta.evaluate(mu)
-            theta_mu_bar = theta.evaluate(mu_bar)
-            assert theta_mu/theta_mu_bar > 0
-            result = np.max((result, theta_mu/theta_mu_bar))
         return result
 
 
