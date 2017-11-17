@@ -53,9 +53,7 @@ def discretize(grid_and_problem_data, T, nt):
     global_mass = DuneXTMatrixOperator(l2_mat)
 
     e = d.estimator
-    estimator = ParabolicEstimator(d.operator,
-                                   d.l2_product,
-                                   e.min_diffusion_evs, e.subdomain_diameters, e.local_eta_rf_squared, e.lambda_coeffs,
+    estimator = ParabolicEstimator(e.min_diffusion_evs, e.subdomain_diameters, e.local_eta_rf_squared, e.lambda_coeffs,
                                    e.mu_bar, e.mu_hat, e.flux_reconstruction, e.oswald_interpolation_error)
 
     d = InstationaryDuneDiscretization(d.global_operator,

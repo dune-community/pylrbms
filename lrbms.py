@@ -155,55 +155,47 @@ class EllipticEstimator(ImmutableInterface):
 
 class ParabolicLRBMSReductor(LRBMSReductor):
 
-    def _reduce(self):
-        d = self.d
+    pass
 
-        if not isinstance(d.operator, LincombOperator) and all(isinstance(op, BlockOperator) for op in
-                                                               d.operator.operators):
-            raise NotImplementedError
+    # def _reduce(self):
+    #     d = self.d
 
-        residual_source_bases = [self.bases[ss.id] for ss in d.operator.source.subspaces]
-        residual_range_bases = []
-        for ii in range(len(residual_source_bases)):
-            b = residual_source_bases[ii].empty()
-            for op in d.operator.operators:
-                for o in op._blocks[ii, :]:
-                    if not isinstance(o, ZeroOperator):
-                        b.append(o.apply(self.bases[o.source.id]))
-            p = d.l2_product._blocks[ii, ii]
-            b = p.apply_inverse(b)
-            gram_schmidt(b, product=p, copy=False)
-            residual_range_bases.append(b)
+    #     if not isinstance(d.operator, LincombOperator) and all(isinstance(op, BlockOperator) for op in
+    #                                                            d.operator.operators):
+    #         raise NotImplementedError
 
-        residual_operator = project_system(d.operator, residual_range_bases, residual_source_bases)
-        residual_operator = unblock(residual_operator)
+    #     residual_source_bases = [self.bases[ss.id] for ss in d.operator.source.subspaces]
+    #     residual_range_bases = []
+    #     for ii in range(len(residual_source_bases)):
+    #         b = residual_source_bases[ii].empty()
+    #         for op in d.operator.operators:
+    #             for o in op._blocks[ii, :]:
+    #                 if not isinstance(o, ZeroOperator):
+    #                     b.append(o.apply(self.bases[o.source.id]))
+    #         p = d.l2_product._blocks[ii, ii]
+    #         b = p.apply_inverse(b)
+    #         gram_schmidt(b, product=p, copy=False)
+    #         residual_range_bases.append(b)
 
-        rd = super()._reduce()
-        rd = rd.with_(estimator=rd.estimator.with_(residual_operator=residual_operator,
-                                                   residual_product=None))
+    #     residual_operator = project_system(d.operator, residual_range_bases, residual_source_bases)
+    #     residual_operator = unblock(residual_operator)
 
-        return rd
+    #     rd = super()._reduce()
+    #     rd = rd.with_(estimator=rd.estimator.with_(residual_operator=residual_operator,
+    #                                                residual_product=None))
+
+    #     return rd
 
 
 class ParabolicEstimator(EllipticEstimator):
-
-    def __init__(self, residual_operator, residual_product,
-                 min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs, mu_bar, mu_hat,
-                 flux_reconstruction, oswald_interpolation_error):
-        super().__init__(min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs, mu_bar, mu_hat,
-                         flux_reconstruction, oswald_interpolation_error)
-        self.residual_operator = residual_operator
-        self.residual_product = residual_product
 
     def estimate(self, U, mu, discretization, decompose=False):
         d = discretization
         dt = d.T / d.time_stepper.nt
 
-        time_residual = self.residual_operator.apply(U[1:] - U[:-1], mu)
-        if self.residual_product:
-            time_residual = self.residual_product.apply_inverse(time_residual).pairwise_dot(time_residual)
-        else:
-            time_residual = time_residual.l2_norm2()
+        # time_residual = self.residual_operator.apply(U[1:] - U[:-1], mu)
+        time_residual = d.operator.apply(U[1:] - U[:-1], mu)
+        time_residual = d.l2_product.apply_inverse(time_residual).pairwise_dot(time_residual)
         time_residual *= dt / 3
         time_residual = np.sqrt(time_residual)
 
