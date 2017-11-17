@@ -231,19 +231,25 @@ class DuneDiscretization(DuneDiscretizationBase, StationaryDiscretization):
         ops_coeffs = affine_lambda['coefficients'].copy()
         #   RHS
         funcs = []
-        for lambda_ in affine_lambda['functions']:
-            funcs.append(make_elliptic_swipdg_vector_functional_on_neighborhood(
-                grid, subdomain, local_boundary_info,
-                neighborhood_space,
-                current_solution, lambda_, kappa,
-                over_integrate=0))
-        funcs_coeffs = affine_lambda['coefficients'].copy()
+
+        # We don't have any boundary treatment right now. Things will probably
+        # break in multiple ways in case of non-trivial boundary conditions,
+        # so we can comment this out for now ..
+
+        # for lambda_ in affine_lambda['functions']:
+        #     funcs.append(make_elliptic_swipdg_vector_functional_on_neighborhood(
+        #         grid, subdomain, local_boundary_info,
+        #         neighborhood_space,
+        #         current_solution, lambda_, kappa,
+        #         over_integrate=0))
+        # funcs_coeffs = affine_lambda['coefficients'].copy()
         funcs.append(make_l2_vector_functional_on_neighborhood(
             grid, subdomain,
             neighborhood_space,
             f,
-            over_integrate=0))
-        funcs_coeffs.append(1.)
+            over_integrate=2))
+        # funcs_coeffs.append(1.)
+        funcs_coeffs = [1]
         #   assemble in one grid walk
         neighborhood_assembler = make_neighborhood_system_assembler(grid, subdomain, neighborhood_space)
         for op in ops:
@@ -505,15 +511,13 @@ def discretize(grid_and_problem_data):
     local_rt_projections = []
     local_oi_projections = []
     local_div_ops = []
-    local_rhs_functionals_for_estimator = []
     local_l2_products = []
     data = dict(grid=grid,
                 block_space=block_space,
                 local_projections=local_projections,
                 local_rt_projections=local_rt_projections,
                 local_oi_projections=local_oi_projections,
-                local_div_ops=local_div_ops,
-                local_rhs_functionals_for_estimator=local_rhs_functionals_for_estimator)
+                local_div_ops=local_div_ops)
 
     for ii in range(grid.num_subdomains):
 
@@ -606,17 +610,6 @@ def discretize(grid_and_problem_data):
                                             name='local_divergence_{}'.format(ii))
         local_div_ops.append(local_div_op)
 
-        # assemble rhs functional on ii for residual estimator
-        est_rhs_vector  = Vector(block_space.local_space(ii).size())
-        l2_functional = make_l2_volume_vector_functional(f, est_rhs_vector,
-                                                         block_space.local_space(ii),
-                                                         over_integrate=2)
-        local_assembler = make_system_assembler(block_space.local_space(ii))
-        local_assembler.append(l2_functional)
-        local_assembler.assemble()
-        local_rhs_functional_for_estimator = VectorFunctional(solution_space.subspaces[ii].make_array([est_rhs_vector]))
-        local_rhs_functionals_for_estimator.append(local_rhs_functional_for_estimator)
-
         ################ Assemble error estimator eoperators -- Nonconformity
 
         operators['nc_{}'.format(ii)] = \
@@ -626,9 +619,10 @@ def discretize(grid_and_problem_data):
         ################ Assemble error estimator eoperators -- Residual
 
         local_div = Concatenation(local_div_op, local_rt_projection)
+        local_rhs = VectorFunctional(block_rhs._array._blocks[ii])
 
         operators['r_dd_{}'.format(ii)] = \
-            Concatenation(local_rhs_functional_for_estimator, local_div, name='r1_{}'.format(ii))
+            Concatenation(local_rhs, local_div, name='r1_{}'.format(ii))
 
         operators['r_fd_{}'.format(ii)] = \
             Concatenation(local_div.T, Concatenation(local_l2_product, local_div), name='r2_{}'.format(ii))
