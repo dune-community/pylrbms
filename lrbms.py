@@ -207,7 +207,7 @@ class ParabolicEstimator(EstimatorBase):
         d = discretization
         dt = d.T / d.time_stepper.nt
 
-        elliptic_indicator, (local_eta_nc, local_eta_r, local_eta_df), elliptic_local_indicators = \
+        eta, (local_eta_nc, local_eta_r, local_eta_df), elliptic_local_indicators = \
             self._estimate_elliptic(U, mu, discretization, True, True)
 
         # time_residual = self.residual_operator.apply(U[1:] - U[:-1], mu)
@@ -216,4 +216,19 @@ class ParabolicEstimator(EstimatorBase):
         time_residual *= dt / 3
         time_residual = np.sqrt(time_residual)
 
-        return (local_eta_nc, local_eta_r, local_eta_df), time_residual
+        # elliptic error
+        eta *= 2 * np.sqrt(dt / 3)
+        local_eta_nc *= 2 * np.sqrt(dt / 3)
+        local_eta_r *= 2 * np.sqrt(dt / 3)
+        local_eta_df *= 2 * np.sqrt(dt / 3)
+
+        U_o = self.oswald_interpolation_error.apply(U)
+        U_o_diff = U_o[1:] - U_o[:-1]
+        time_deriv_nc = np.zeros((self.num_subdomains, len(U) - 1))
+        for ii in range(self.num_subdomains):
+            time_deriv_nc[ii] = d.operators['nc_{}'.format(ii)].pairwise_apply2(U_o_diff, U_o_diff, mu=mu)
+        time_deriv_nc *= 1 / dt
+        time_deriv_nc = np.sqrt(time_deriv_nc)
+
+        est = np.linalg.norm(eta) + np.linalg.norm(time_residual) + np.linalg.norm(time_deriv_nc)
+        return est, (local_eta_nc, local_eta_r, local_eta_df, time_residual, time_deriv_nc)
