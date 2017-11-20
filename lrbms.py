@@ -1,10 +1,9 @@
 import numpy as np
 
-from pymor.algorithms.gram_schmidt import gram_schmidt
-from pymor.algorithms.system import project_system, unblock
+from pymor.algorithms.system import unblock
 from pymor.core.interfaces import ImmutableInterface
-from pymor.operators.block import BlockDiagonalOperator, BlockOperator
-from pymor.operators.constructions import LincombOperator, ZeroOperator
+from pymor.operators.block import BlockDiagonalOperator
+from pymor.operators.constructions import LincombOperator
 from pymor.operators.numpy import NumpyMatrixOperator
 from pymor.reductors.system import GenericRBSystemReductor
 
@@ -72,7 +71,7 @@ class LRBMSReductor(GenericRBSystemReductor):
         self.extend_basis_local(local_correction)
 
 
-class EllipticEstimator(ImmutableInterface):
+class EstimatorBase(ImmutableInterface):
 
     def __init__(self, min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs, mu_bar, mu_hat,
                  flux_reconstruction, oswald_interpolation_error):
@@ -86,28 +85,38 @@ class EllipticEstimator(ImmutableInterface):
         self.oswald_interpolation_error = oswald_interpolation_error
         self.num_subdomains = len(subdomain_diameters)
 
-    def estimate(self, U, mu, discretization, decompose=False):
-        d = discretization
-
+    def _estimate_elliptic(self, U, mu, d, elliptic_reconstruction=False, decompose=False):
         alpha_mu_mu_bar = self.alpha(self.lambda_coeffs, mu, self.mu_bar)
         gamma_mu_mu_bar = self.gamma(self.lambda_coeffs, mu, self.mu_bar)
         alpha_mu_mu_hat = self.alpha(self.lambda_coeffs, mu, self.mu_hat)
 
-        local_eta_nc = np.zeros(self.num_subdomains)
-        local_eta_r = np.zeros(self.num_subdomains)
-        local_eta_df = np.zeros(self.num_subdomains)
+        local_eta_nc = np.zeros((self.num_subdomains, len(U)))
+        local_eta_r = np.zeros((self.num_subdomains, len(U)))
+        local_eta_df = np.zeros((self.num_subdomains, len(U)))
 
         U_r = self.flux_reconstruction.apply(U, mu=mu)
         U_o = self.oswald_interpolation_error.apply(U)
 
+        if elliptic_reconstruction:
+            BU = d.operator.apply(U, mu=mu)
+            BU_R = d.l2_product.apply_inverse(BU)
+            F_R = d.l2_product.apply_inverse(d.rhs.as_source_array())
+            BUF_R = BU_R - F_R
+
         for ii in range(self.num_subdomains):
-            local_eta_nc[ii] = d.operators['nc_{}'.format(ii)].apply2(U_o, U_o, mu=mu)
+            local_eta_nc[ii] = d.operators['nc_{}'.format(ii)].pairwise_apply2(U_o, U_o, mu=mu)
             local_eta_r[ii] += self.local_eta_rf_squared[ii]
-            local_eta_r[ii] -= 2*d.operators['r_dd_{}'.format(ii)].apply(U_r, mu=mu).data
-            local_eta_r[ii] += d.operators['r_fd_{}'.format(ii)].apply2(U_r, U_r, mu=mu)
-            local_eta_df[ii] += d.operators['df_aa_{}'.format(ii)].apply2(U, U, mu=mu)
-            local_eta_df[ii] += d.operators['df_bb_{}'.format(ii)].apply2(U_r, U_r, mu=mu)
-            local_eta_df[ii] += 2*d.operators['df_ab_{}'.format(ii)].apply2(U, U_r, mu=mu)
+            local_eta_r[ii] -= 2*d.operators['r_fd_{}'.format(ii)].apply(U_r, mu=mu).data[:, 0]
+            local_eta_r[ii] += d.operators['r_dd_{}'.format(ii)].pairwise_apply2(U_r, U_r, mu=mu)
+            if elliptic_reconstruction:
+                local_eta_r[ii] += d.operators['r_l2_{}'.format(ii)].pairwise_apply2(BU_R, BU_R)
+                # local_eta_r[ii] -= self.local_eta_rpf_squared[ii]
+                local_eta_r[ii] -= d.operators['r_l2_{}'.format(ii)].pairwise_apply2(F_R, F_R)
+                local_eta_r[ii] -= 2*d.operators['r_ud_{}'.format(ii)].pairwise_apply2(BUF_R, U_r, mu=mu)
+
+            local_eta_df[ii] += d.operators['df_aa_{}'.format(ii)].pairwise_apply2(U, U, mu=mu)
+            local_eta_df[ii] += d.operators['df_bb_{}'.format(ii)].pairwise_apply2(U_r, U_r, mu=mu)
+            local_eta_df[ii] += 2*d.operators['df_ab_{}'.format(ii)].pairwise_apply2(U, U_r, mu=mu)
 
             # eta r, scale
             poincaree_constant = 1./(np.pi**2)
@@ -120,8 +129,8 @@ class EllipticEstimator(ImmutableInterface):
         local_eta_df = np.sqrt(local_eta_df)
 
         eta = 0.
-        eta += np.sqrt(gamma_mu_mu_bar)      * np.linalg.norm(local_eta_nc)
-        eta += (1./np.sqrt(alpha_mu_mu_hat)) * np.linalg.norm(local_eta_r + local_eta_df)
+        eta += np.sqrt(gamma_mu_mu_bar)      * np.linalg.norm(local_eta_nc, axis=0)
+        eta += (1./np.sqrt(alpha_mu_mu_hat)) * np.linalg.norm(local_eta_r + local_eta_df, axis=0)
         eta *= 1./np.sqrt(alpha_mu_mu_bar)
 
         if decompose:
@@ -151,6 +160,12 @@ class EllipticEstimator(ImmutableInterface):
             assert theta_mu/theta_mu_bar > 0
             result = np.max((result, theta_mu/theta_mu_bar))
         return result
+
+
+class EllipticEstimator(EstimatorBase):
+
+    def estimate(self, U, mu, discretization, decompose=False):
+        return self._estimate_elliptic(U, mu, discretization, False, decompose)
 
 
 class ParabolicLRBMSReductor(LRBMSReductor):
@@ -187,11 +202,14 @@ class ParabolicLRBMSReductor(LRBMSReductor):
     #     return rd
 
 
-class ParabolicEstimator(EllipticEstimator):
+class ParabolicEstimator(EstimatorBase):
 
     def estimate(self, U, mu, discretization, decompose=False):
         d = discretization
         dt = d.T / d.time_stepper.nt
+
+        elliptic_indicator, (local_eta_nc, local_eta_r, local_eta_df), elliptic_local_indicators = \
+            self._estimate_elliptic(U, mu, discretization, True, True)
 
         # time_residual = self.residual_operator.apply(U[1:] - U[:-1], mu)
         time_residual = d.operator.apply(U[1:] - U[:-1], mu)
@@ -199,4 +217,4 @@ class ParabolicEstimator(EllipticEstimator):
         time_residual *= dt / 3
         time_residual = np.sqrt(time_residual)
 
-        return time_residual
+        return (local_eta_nc, local_eta_r, local_eta_df), time_residual

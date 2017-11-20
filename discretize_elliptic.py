@@ -517,7 +517,8 @@ def discretize(grid_and_problem_data):
                 local_projections=local_projections,
                 local_rt_projections=local_rt_projections,
                 local_oi_projections=local_oi_projections,
-                local_div_ops=local_div_ops)
+                local_div_ops=local_div_ops,
+                local_l2_products=local_l2_products)
 
     for ii in range(grid.num_subdomains):
 
@@ -621,10 +622,10 @@ def discretize(grid_and_problem_data):
         local_div = Concatenation(local_div_op, local_rt_projection)
         local_rhs = VectorFunctional(block_rhs._array._blocks[ii])
 
-        operators['r_dd_{}'.format(ii)] = \
+        operators['r_fd_{}'.format(ii)] = \
             Concatenation(local_rhs, local_div, name='r1_{}'.format(ii))
 
-        operators['r_fd_{}'.format(ii)] = \
+        operators['r_dd_{}'.format(ii)] = \
             Concatenation(local_div.T, Concatenation(local_l2_product, local_div), name='r2_{}'.format(ii))
 
         ################ Assemble error estimator eoperators -- Diffusive flux

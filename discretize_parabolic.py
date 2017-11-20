@@ -1,7 +1,10 @@
+import numpy as np
+
 from pymor.algorithms.timestepping import ImplicitEulerTimeStepper
 from pymor.bindings.dunext import DuneXTMatrixOperator
 from pymor.bindings.dunegdt import DuneGDTVisualizer
 from pymor.discretizations.basic import InstationaryDiscretization
+from pymor.operators.constructions import Concatenation
 
 from discretize_elliptic import DuneDiscretizationBase
 from discretize_elliptic import discretize as discretize_ell
@@ -51,6 +54,20 @@ def discretize(grid_and_problem_data, T, nt):
     mass = d.l2_product
     operators = {k: v for k, v in d.operators.items() if k not in d.special_operators}
     global_mass = DuneXTMatrixOperator(l2_mat)
+
+    local_div_ops, local_l2_products, local_projections, local_rt_projections = \
+        d_data['local_div_ops'], d_data['local_l2_products'], d_data['local_projections'], d_data['local_rt_projections']
+
+    for ii in range(d_data['grid'].num_subdomains):
+
+        local_div = Concatenation(local_div_ops[ii], local_rt_projections[ii])
+
+        operators['r_ud_{}'.format(ii)] = \
+            Concatenation(local_projections[ii].T, Concatenation(local_l2_products[ii], local_div), name='r_ud_{}'.format(ii))
+
+        operators['r_l2_{}'.format(ii)] = \
+            Concatenation(local_projections[ii].T, Concatenation(local_l2_products[ii], local_projections[ii]),
+                          name='r_l2_{}'.format(ii))
 
     e = d.estimator
     estimator = ParabolicEstimator(e.min_diffusion_evs, e.subdomain_diameters, e.local_eta_rf_squared, e.lambda_coeffs,

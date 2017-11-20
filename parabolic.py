@@ -5,6 +5,7 @@ import numpy as np
 from pymor.core.exceptions import ExtensionError
 
 from thermalblock_problem import init_grid_and_problem
+# from OS2015_academic_problem import init_grid_and_problem
 from discretize_parabolic import discretize
 from lrbms import ParabolicLRBMSReductor
 
@@ -46,6 +47,7 @@ reductor = ParabolicLRBMSReductor(d, products=[d.operators['local_energy_dg_prod
 
 
 mu = d.parameter_space.sample_randomly(1)[0]
+# mu = d.parse_parameter(1.)
 U = d.solve(mu)
 reductor.extend_basis(U)
 rd = reductor.reduce()
@@ -66,8 +68,14 @@ UU = reductor.reconstruct(u)
 
 
 print((U - UU).l2_norm() / U.l2_norm())
-print(d.estimate(U, mu))
-print(rd.estimate(u, mu))
+(local_eta_nc, local_eta_r, local_eta_df), _ = d.estimate(U, mu)
+print('  nonconformity indicator:  {}'.format(np.linalg.norm(local_eta_nc, axis=0)))
+print('  residual indicator:       {}'.format(np.linalg.norm(local_eta_r, axis=0)))
+print('  diffusive flux indicator: {}'.format(np.linalg.norm(local_eta_df, axis=0)))
+(local_eta_nc, local_eta_r, local_eta_df), _ = rd.estimate(u, mu)
+print('  nonconformity indicator:  {}'.format(np.linalg.norm(local_eta_nc, axis=0)))
+print('  residual indicator:       {}'.format(np.linalg.norm(local_eta_r, axis=0)))
+print('  diffusive flux indicator: {}'.format(np.linalg.norm(local_eta_df, axis=0)))
 # print(rd.mass)
 
 # u = rd.solve(mu)
