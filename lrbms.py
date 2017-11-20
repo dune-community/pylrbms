@@ -110,7 +110,6 @@ class EstimatorBase(ImmutableInterface):
             local_eta_r[ii] += d.operators['r_dd_{}'.format(ii)].pairwise_apply2(U_r, U_r, mu=mu)
             if elliptic_reconstruction:
                 local_eta_r[ii] += d.operators['r_l2_{}'.format(ii)].pairwise_apply2(BU_R, BU_R)
-                # local_eta_r[ii] -= self.local_eta_rpf_squared[ii]
                 local_eta_r[ii] -= d.operators['r_l2_{}'.format(ii)].pairwise_apply2(F_R, F_R)
                 local_eta_r[ii] -= 2*d.operators['r_ud_{}'.format(ii)].pairwise_apply2(BUF_R, U_r, mu=mu)
 

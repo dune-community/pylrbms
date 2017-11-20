@@ -361,9 +361,9 @@ def discretize(grid_and_problem_data):
         def assemble_local_contributions(subdomain):
             ipdg_operator = make_elliptic_swipdg_matrix_operator(lambda_, kappa, local_all_neumann_boundary_info,
                                                                  local_matrices[subdomain],
-                                                                 block_space.local_space(subdomain))
+                                                                 block_space.local_space(subdomain), over_integrate=2)
             l2_functional = make_l2_volume_vector_functional(f, local_vectors[subdomain],
-                                                             block_space.local_space(subdomain))
+                                                             block_space.local_space(subdomain), over_integrate=2)
             local_assembler = make_system_assembler(block_space.local_space(subdomain))
             local_assembler.append(ipdg_operator)
             local_assembler.append(l2_functional)
