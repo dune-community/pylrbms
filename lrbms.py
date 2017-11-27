@@ -163,8 +163,8 @@ class EstimatorBase(ImmutableInterface):
 
 class EllipticEstimator(EstimatorBase):
 
-    def estimate(self, U, mu, discretization, decompose=False):
-        return self._estimate_elliptic(U, mu, discretization, False, decompose)
+    def estimate(self, U, mu, d, decompose=False):
+        return self._estimate_elliptic(U, mu, d, False, decompose)
 
 
 class ParabolicLRBMSReductor(LRBMSReductor):
@@ -203,12 +203,11 @@ class ParabolicLRBMSReductor(LRBMSReductor):
 
 class ParabolicEstimator(EstimatorBase):
 
-    def estimate(self, U, mu, discretization, decompose=False):
-        d = discretization
+    def estimate(self, U, mu, d, decompose=False):
         dt = d.T / d.time_stepper.nt
 
         eta, (local_eta_nc, local_eta_r, local_eta_df), elliptic_local_indicators = \
-            self._estimate_elliptic(U, mu, discretization, True, True)
+            self._estimate_elliptic(U, mu, d, True, True)
 
         # time_residual = self.residual_operator.apply(U[1:] - U[:-1], mu)
         time_residual = d.operator.apply(U[1:] - U[:-1], mu)

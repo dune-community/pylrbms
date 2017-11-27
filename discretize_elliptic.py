@@ -614,19 +614,19 @@ def discretize(grid_and_problem_data):
         ################ Assemble error estimator eoperators -- Nonconformity
 
         operators['nc_{}'.format(ii)] = \
-            Concatenation(local_oi_projection.T, Concatenation(local_elliptic_product, local_oi_projection),
+            Concatenation([local_oi_projection.T, local_elliptic_product, local_oi_projection],
                           name='nonconformity_{}'.format(ii))
 
         ################ Assemble error estimator eoperators -- Residual
 
-        local_div = Concatenation(local_div_op, local_rt_projection)
+        local_div = Concatenation([local_div_op, local_rt_projection])
         local_rhs = VectorFunctional(block_rhs._array._blocks[ii])
 
         operators['r_fd_{}'.format(ii)] = \
-            Concatenation(local_rhs, local_div, name='r1_{}'.format(ii))
+            Concatenation([local_rhs, local_div], name='r1_{}'.format(ii))
 
         operators['r_dd_{}'.format(ii)] = \
-            Concatenation(local_div.T, Concatenation(local_l2_product, local_div), name='r2_{}'.format(ii))
+            Concatenation([local_div.T, local_l2_product, local_div], name='r2_{}'.format(ii))
 
         ################ Assemble error estimator eoperators -- Diffusive flux
 
@@ -663,7 +663,7 @@ def discretize(grid_and_problem_data):
             matrix = DuneXTMatrixOperator(diffusive_flux_bb_product.matrix(),
                                           range_id='LOCALRT_{}'.format(ii),
                                           source_id='LOCALRT_{}'.format(ii))
-            return Concatenation(local_rt_projection.T, Concatenation(matrix, local_rt_projection),
+            return Concatenation([local_rt_projection.T, matrix, local_rt_projection],
                                  name='diffusive_flux_bb_{}'.format(ii))
 
         def assemble_estimator_diffusive_flux_ab(lambda_xi):
@@ -682,7 +682,7 @@ def discretize(grid_and_problem_data):
             matrix = DuneXTMatrixOperator(diffusive_flux_ab_product.matrix(),
                                           range_id='domain_{}'.format(ii),
                                           source_id='LOCALRT_{}'.format(ii))
-            return Concatenation(local_projection.T, Concatenation(matrix, local_rt_projection))
+            return Concatenation([local_projection.T, matrix, local_rt_projection])
 
         operators['df_aa_{}'.format(ii)] = LincombOperator(
             [assemble_estimator_diffusive_flux_aa(lambda_xi, lambda_xi_prime)

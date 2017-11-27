@@ -60,13 +60,13 @@ def discretize(grid_and_problem_data, T, nt):
 
     for ii in range(d_data['grid'].num_subdomains):
 
-        local_div = Concatenation(local_div_ops[ii], local_rt_projections[ii])
+        local_div = Concatenation([local_div_ops[ii], local_rt_projections[ii]])
 
         operators['r_ud_{}'.format(ii)] = \
-            Concatenation(local_projections[ii].T, Concatenation(local_l2_products[ii], local_div), name='r_ud_{}'.format(ii))
+            Concatenation([local_projections[ii].T, local_l2_products[ii], local_div], name='r_ud_{}'.format(ii))
 
         operators['r_l2_{}'.format(ii)] = \
-            Concatenation(local_projections[ii].T, Concatenation(local_l2_products[ii], local_projections[ii]),
+            Concatenation([local_projections[ii].T, local_l2_products[ii], local_projections[ii]],
                           name='r_l2_{}'.format(ii))
 
     e = d.estimator
