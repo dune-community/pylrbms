@@ -6,7 +6,7 @@ from pymor.core.exceptions import ExtensionError
 
 from thermalblock_problem import init_grid_and_problem
 # from OS2015_academic_problem import init_grid_and_problem
-from discretize_parabolic import discretize
+from discretize_parabolic_block_swipdg import discretize
 from lrbms import ParabolicLRBMSReductor
 
 from pymor.core.logger import set_log_levels
