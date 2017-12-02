@@ -15,7 +15,7 @@ from dune.xt.functions import (
 )
 from dune.xt.grid import (
     make_boundary_info_on_dd_subdomain_boundary_layer as make_boundary_info,
-    make_cube_dd_subdomains_grid__2d_simplex_aluconform as make_grid,
+    make_cube_dd_subdomains_grid__2d_simplex_aluconformgrid as make_grid,
 )
 
 from pymor.parameters.functionals import ProjectionParameterFunctional
