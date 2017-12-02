@@ -10,7 +10,7 @@ from discretize_parabolic import discretize
 from lrbms import ParabolicLRBMSReductor
 
 from pymor.core.logger import set_log_levels
-set_log_levels({'discretize_elliptic': 'INFO',
+set_log_levels({'discretize_elliptic_block_swipdg': 'INFO',
                 'lrbms': 'INFO',
                 'pymor.algorithms.gram_schmidt': 'WARN'})
 

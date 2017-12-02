@@ -6,8 +6,8 @@ from pymor.bindings.dunegdt import DuneGDTVisualizer
 from pymor.discretizations.basic import InstationaryDiscretization
 from pymor.operators.constructions import Concatenation
 
-from discretize_elliptic import DuneDiscretizationBase
-from discretize_elliptic import discretize as discretize_ell
+from discretize_elliptic_block_swipdg import DuneDiscretizationBase
+from discretize_elliptic_block_swipdg import discretize as discretize_ell
 from lrbms import ParabolicEstimator
 
 

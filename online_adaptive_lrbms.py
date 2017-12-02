@@ -8,7 +8,7 @@ from pymor.core.exceptions import ExtensionError
 from pymor.core.logger import getLogger, set_log_levels
 set_log_levels({'online_adaptive_lrbms': 'DEBUG',
                 'OS2015_academic_problem': 'INFO',
-                'discretize_elliptic': 'INFO',
+                'discretize_elliptic_block_swipdg': 'INFO',
                 'offline': 'INFO',
                 'online_enrichment': 'INFO',
                 'lrbms': 'INFO'})
@@ -17,7 +17,7 @@ from pymor.discretizations.basic import StationaryDiscretization
 
 from OS2015_academic_problem import init_grid_and_problem
 # from local_thermalblock_problem import init_grid_and_problem
-from discretize_elliptic import discretize
+from discretize_elliptic_block_swipdg import discretize
 from online_enrichment import AdaptiveEnrichment
 from lrbms import LRBMSReductor
 

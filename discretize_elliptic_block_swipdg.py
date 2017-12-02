@@ -285,7 +285,7 @@ def discretize(grid_and_problem_data):
 
     ################ Setup
 
-    logger = getLogger('discretize_elliptic.discretize_block_SWIPDG')
+    logger = getLogger('discretize_elliptic_block_swipdg.discretize')
     logger.info('discretizing ... ')
 
     grid, boundary_info = grid_and_problem_data['grid'], grid_and_problem_data['boundary_info']

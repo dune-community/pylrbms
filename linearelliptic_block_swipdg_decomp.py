@@ -7,11 +7,11 @@ from pymor.core.exceptions import ExtensionError
 
 # from thermalblock_problem import init_grid_and_problem
 from OS2015_academic_problem import init_grid_and_problem
-from discretize_elliptic import discretize
+from discretize_elliptic_block_swipdg import discretize
 from lrbms import LRBMSReductor
 
 from pymor.core.logger import set_log_levels
-set_log_levels({'discretize_elliptic': 'INFO',
+set_log_levels({'discretize_elliptic_block_swipdg': 'INFO',
                 'lrbms': 'INFO'})
 
 
