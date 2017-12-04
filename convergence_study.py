@@ -146,7 +146,7 @@ class StationaryEocStudy(EocStudy):
     EOC_accuracy = 'h'
     norms = ('L2', 'elliptic_mu_bar')
     indicators = None
-    max_levels = 2
+    max_levels = 3
     _grid_and_problem_data, _d, _d_data, _solution, _solution_as_reference, _config, _cache = {}, {}, {}, {}, {}, {}, {}
 
     def __init__(self, gp_initializer, disc, base_cfg, refine, mu, p_ref=2):
