@@ -634,7 +634,7 @@ def discretize(grid_and_problem_data):
             diffusive_flux_aa_product = make_diffusive_flux_aa_product(
                 grid, ii,
                 block_space.local_space(ii),
-                lambda_bar,
+                lambda_hat,
                 lambda_u=lambda_xi, lambda_v=lambda_xi_prime,
                 kappa=kappa,
                 over_integrate=2
@@ -653,7 +653,7 @@ def discretize(grid_and_problem_data):
             diffusive_flux_bb_product = make_diffusive_flux_bb_product(
                 grid, ii,
                 subdomain_rt_spaces[ii],
-                lambda_bar,
+                lambda_hat,
                 kappa=kappa,
                 over_integrate=2
             )
@@ -672,7 +672,7 @@ def discretize(grid_and_problem_data):
                 range_space=block_space.local_space(ii),
                 source_space=subdomain_rt_spaces[ii],
                 lambda_range=lambda_xi,
-                lambda_hat=lambda_bar,
+                lambda_hat=lambda_hat,
                 kappa=kappa,
                 over_integrate=2
             )
@@ -701,7 +701,7 @@ def discretize(grid_and_problem_data):
             name='diffusive_flux_ab_{}'.format(ii)
         )
 
-    ################ Finaly assembly
+    ################ Finally assembly
 
     # instantiate error estimator
     min_diffusion_evs = np.array([min_diffusion_eigenvalue(grid, ii, lambda_hat, kappa) for ii in
