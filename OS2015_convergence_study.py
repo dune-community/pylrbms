@@ -20,7 +20,7 @@ print('                                  Multiscale method with adaptive on-line
 print('====================================================================================')
 print()
 
-OS2015_study = StationaryEocStudy(
+OS2015_all_mus_equal_study = StationaryEocStudy(
         init_grid_and_problem,
         discretize,
         {'num_coarse_grid_elements': [4, 4],
@@ -29,14 +29,42 @@ OS2015_study = StationaryEocStudy(
          'num_grid_oversampling_layers': 1},
         refine,
         mu=1)
-OS2015_study.indicators = ('eta_nc', 'eta_r', 'eta_df')
+OS2015_all_mus_equal_study.indicators = ('eta_nc', 'eta_r', 'eta_df')
 
 print('p. A2885, Table 1, all but \'eta_r\' and \'eff.\' columns')
-OS2015_study.run(('h', 'elliptic_mu_bar', 'eta_nc', 'eta_df'))
+OS2015_all_mus_equal_study.run(('h', 'elliptic_mu_bar', 'eta_nc', 'eta_df'))
 print()
 
-print('p. A2886, Table 2, \'eta_r\' column')
-OS2015_study.run(('h', 'eta_r'))
+print('p. A2886, Table 2, \'eta_r\' and \'eta\' (mu_hat=1)')
+OS2015_all_mus_equal_study.run(('h', 'eta_r', 'eta'))
+print()
+
+print('p. A2886, Table 2, \'eta_df\' and \'eta\' (mu_hat=0.1)')
+OS2015_mu_hat_special_study = StationaryEocStudy(
+        partial(init_grid_and_problem, mu_bar=1, mu_hat=0.1),
+        discretize,
+        {'num_coarse_grid_elements': [4, 4],
+         'num_grid_refinements': 2,
+         'num_grid_subdomains': [2, 2],
+         'num_grid_oversampling_layers': 1},
+        refine,
+        mu=1)
+OS2015_mu_hat_special_study.indicators = ('eta_df',)
+OS2015_mu_hat_special_study.run(('h', 'eta_df', 'eta'))
+print()
+
+print('p. A2886, Table 3')
+OS2015_table_3_study = StationaryEocStudy(
+        partial(init_grid_and_problem, mu_bar=0.1, mu_hat=0.1),
+        discretize,
+        {'num_coarse_grid_elements': [4, 4],
+         'num_grid_refinements': 2,
+         'num_grid_subdomains': [2, 2],
+         'num_grid_oversampling_layers': 1},
+        refine,
+        mu=1)
+OS2015_table_3_study.indicators = ('eta_nc',)
+OS2015_table_3_study.run(('h', 'elliptic_mu_bar', 'eta_nc'))
 
 print()
 

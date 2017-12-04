@@ -14,15 +14,15 @@ set_log_levels({'pymor.discretizations.basic': 'WARN',})
 from discretize_elliptic_swipdg import discretize as discretize_elliptic_swipdg
 
 
-class EocStudy(object):
+class EocStudy:
 
     level_info_title = None
     accuracies = None
-    EOC_accuracy = None
     norms = None
     indicators = None
+    estimates = None
     max_levels = None
-    data = {}
+    data = None
 
     def solve(self, level):
         pass
@@ -44,6 +44,18 @@ class EocStudy(object):
 
     def run(self, only_these = None):
 
+        actual_accuracies = self.accuracies if not only_these else tuple(id for id in self.accuracies if id in only_these)
+        actual_norms = self.norms if not only_these else tuple(id for id in self.norms if id in only_these)
+        actual_indicators = self.indicators if not only_these else tuple(id for id in self.indicators if id in only_these)
+        actual_estimates = self.estimates if not only_these else tuple(ids for ids in self.estimates if ids[0] in only_these)
+
+        column_width = 8
+        if len(actual_accuracies) > 1:
+            eoc_column_width = 8
+        else:
+            eoc_column_width = 4
+        print_full_estimate = False
+
         def lfill(id_, len_):
             if len(id_) == len_:
                 return id_
@@ -53,19 +65,20 @@ class EocStudy(object):
                 return ' '*(len_ - len(id_)) + id_
 
         def cfill(id_, len_):
-            assert len(id_) < len_
+            if len(id_) > len_ - 1:
+                return id_[:(len_ - 1)] + '.'
             rpadd = int((len_ - len(id_))/2)
             return ' '*(len_ - rpadd - len(id_)) + id_ + ' '*rpadd
 
-        def compute_eoc(quantity_old, quantity_new, level):
+        def compute_eoc(quantity_old, quantity_new, level, accuracy_id):
             if np.allclose(quantity_old, 0):
-                return lfill('inf', column_width)
+                return lfill('inf', eoc_column_width)
             else:
-                accuracy_old, accuracy_new = self.data[level - 1]['accuracy'][self.EOC_accuracy], self.data[level]['accuracy'][self.EOC_accuracy]
+                accuracy_old = self.data[level - 1]['accuracy'][accuracy_id]
+                accuracy_new = self.data[level]['accuracy'][accuracy_id]
                 return lfill('{:.2f}'.format(np.log(quantity_new / quantity_old) / np.log(accuracy_new / accuracy_old)),
-                             column_width)
+                             eoc_column_width)
 
-        column_width = 8
 
         # build header
         #   discretization
@@ -76,24 +89,44 @@ class EocStudy(object):
         for id in self.accuracies:
             if not only_these or id in only_these:
                 h2 += '| ' + lfill(id, column_width) + ' '
-                d1 += '-'*11
-                delim += '+' + '-'*10
-        h1 += cfill('discretization', len(h2) - 1)
+                d1 += '-'*(column_width + 3)
+                delim += '+' + '-'*(column_width + 2)
+        h1 += cfill('discretization', len(self.level_info_title) + len(actual_accuracies)*(column_width + 3)) + ' '
         #   norms
-        for id in self.norms:
-            if not only_these or id in only_these:
-                h1 += '|' + cfill(id, 21)
-                d1 += '+' + '-'*21
-                h2 += '| ' + lfill('norm', column_width) + ' | ' + lfill('EOC', column_width) + ' '
-                delim += '+' + '-'*10 + '+' + '-'*10
+        for id in actual_norms:
+            h1 += '| ' + cfill(id, column_width + len(actual_accuracies)*(eoc_column_width + 3)) + ' '
+            d1 += '+' + '-'*(column_width + 2 + len(actual_accuracies)*(eoc_column_width + 3))
+            h2 += '| ' + lfill('norm', column_width) + ' '
+            delim += '+' + '-'*(column_width + 2)
+            for acc_id in actual_accuracies:
+                h2 += '| ' + lfill('EOC' if len(actual_accuracies) == 1 else 'EOC ({})'.format(acc_id), eoc_column_width) + ' '
+                delim += '+' + '-'*(eoc_column_width + 2)
         #   indicators
-        if self.indicators:
-            for id in self.indicators:
-                if not only_these or id in only_these:
-                    h1 += '|' + cfill(id, 21)
-                    d1 += '+' + '-'*21
-                    h2 += '| ' + lfill('indicator', column_width) + ' | ' + lfill('EOC', column_width) + ' '
-                    delim += '+' + '-'*10 + '+' + '-'*10
+        for id in actual_indicators:
+            h1 += '| ' + cfill(id, column_width + len(actual_accuracies)*(eoc_column_width + 3)) + ' '
+            d1 += '+' + '-'*(column_width + 2 + len(actual_accuracies)*(eoc_column_width + 3))
+            h2 += '| ' + lfill('indicator', column_width) + ' '
+            delim += '+' + '-'*(column_width + 2)
+            for acc_id in actual_accuracies:
+                h2 += '| ' + lfill('EOC' if len(actual_accuracies) == 1 else 'EOC ({})'.format(acc_id), eoc_column_width) + ' '
+                delim += '+' + '-'*(eoc_column_width + 2)
+        #   estimates
+        for id, _ in actual_estimates:
+            if print_full_estimate:
+                h1 += '| ' + cfill(id, column_width + (len(actual_accuracies) + 1)*(eoc_column_width + 3)) + ' '
+            else:
+                h1 += '| ' + cfill(id, (len(actual_accuracies) + 1)*(eoc_column_width + 3) - 2) + ' '
+            if print_full_estimate:
+                d1 += '+' + '-'*(column_width + 2)
+                h2 += '| ' + lfill('estimate', column_width) + ' '
+                delim += '+' + '-'*(column_width + 2)
+            d1 += '+' + '-'*(eoc_column_width + 2)
+            h2 += '| ' + lfill('eff.', eoc_column_width) + ' '
+            delim += '+' + '-'*(eoc_column_width + 2)
+            for acc_id in actual_accuracies:
+                d1 += '+' + '-'*(eoc_column_width + 2)
+                h2 += '| ' + lfill('EOC' if len(actual_accuracies) == 1 else 'EOC ({})'.format(acc_id), eoc_column_width) + ' '
+                delim += '+' + '-'*(eoc_column_width + 2)
         # print header
         print('=' * len(h1))
         print(h1)
@@ -102,38 +135,62 @@ class EocStudy(object):
         print(delim.replace('-', '=', -1))
         # print levels
         for level in range(self.max_levels + 1):
+            # level info
             if not level in self.data:
                 self.data[level] = {}
             self.solve(level)
             print(' ' + cfill(self.level_info(level), len(self.level_info_title)) + ' ', end='')
+            # accuracies
             if not 'accuracy' in self.data[level]:
                 self.data[level]['accuracy'] = {}
             for id in self.accuracies:
                 self.data[level]['accuracy'][id] = self.accuracy(level, id)
                 if not only_these or id in only_these:
-                    print('| ' + lfill('{:.2e}'.format(self.data[level]['accuracy'][id]), 8) + ' ', end='')
+                    print('| ' + lfill('{:.2e}'.format(self.data[level]['accuracy'][id]), column_width) + ' ', end='')
+            # norms
             if not 'norm' in self.data[level]:
                 self.data[level]['norm'] = {}
-            for id in self.norms:
-                if not only_these or id in only_these:
-                    self.data[level]['norm'][id] = self.compute_norm(level, id)
-                    print('| ' + lfill('{:.2e}'.format(self.data[level]['norm'][id]), 8) + ' ', end='')
+            for id in actual_norms:
+                self.data[level]['norm'][id] = self.compute_norm(level, id)
+                print('| ' + lfill('{:.2e}'.format(self.data[level]['norm'][id]), column_width) + ' ', end='')
+                for acc_id in actual_accuracies:
                     if level == 0:
-                        print('| ' + lfill('----', column_width) + ' ', end='')
+                        print('| ' + lfill('----', eoc_column_width) + ' ', end='')
                     else:
-                        print('| ' + compute_eoc(self.data[level - 1]['norm'][id], self.data[level]['norm'][id], level) + ' ', end='')
+                        print('| ' + compute_eoc(self.data[level - 1]['norm'][id],
+                                                 self.data[level]['norm'][id],
+                                                 level, acc_id) + ' ', end='')
+            # indicators
             if not 'indicator' in self.data[level]:
                 self.data[level]['indicator'] = {}
-            if self.indicators:
-                for id in self.indicators:
-                    if not only_these or id in only_these:
-                        self.data[level]['indicator'][id] = self.compute_indicator(level, id)
-                        print('| ' + lfill('{:.2e}'.format(self.data[level]['indicator'][id]), 8) + ' ', end='')
-                        if level == 0:
-                            print('| ' + lfill('----', column_width) + ' ', end='')
-                        else:
-                            print('| ' + compute_eoc(self.data[level - 1]['indicator'][id],
-                                                     self.data[level]['indicator'][id], level) + ' ', end='')
+            for id in actual_indicators:
+                self.data[level]['indicator'][id] = self.compute_indicator(level, id)
+                print('| ' + lfill('{:.2e}'.format(self.data[level]['indicator'][id]), column_width) + ' ', end='')
+                for acc_id in actual_accuracies:
+                    if level == 0:
+                        print('| ' + lfill('----', eoc_column_width) + ' ', end='')
+                    else:
+                        print('| ' + compute_eoc(self.data[level - 1]['indicator'][id],
+                                                 self.data[level]['indicator'][id],
+                                                 level, acc_id) + ' ', end='')
+            if not 'estimate' in self.data[level]:
+                self.data[level]['estimate'] = {}
+            for estimate_id, norm_id in actual_estimates:
+                self.data[level]['estimate'][estimate_id] = self.compute_estimate(level, estimate_id)
+                if not norm_id in self.data[level]['norm']:
+                    self.data[level]['norm'][norm_id] = self.compute_norm(level, norm_id)
+                if print_full_estimate:
+                    print('| ' + lfill('{:.2e}'.format(self.data[level]['estimate'][estimate_id]), column_width) + ' ', end='')
+                print('| ' +
+                        lfill('{:.2f}'.format(self.data[level]['estimate'][estimate_id]/self.data[level]['norm'][norm_id]),
+                            eoc_column_width) + ' ', end='')
+                for acc_id in actual_accuracies:
+                    if level == 0:
+                        print('| ' + lfill('----', eoc_column_width) + ' ', end='')
+                    else:
+                        print('| ' + compute_eoc(self.data[level - 1]['estimate'][estimate_id],
+                                                 self.data[level]['estimate'][estimate_id],
+                                                 level, acc_id) + ' ', end='')
             print()
             if level < self.max_levels:
                 print(delim)
@@ -146,10 +203,13 @@ class StationaryEocStudy(EocStudy):
     EOC_accuracy = 'h'
     norms = ('L2', 'elliptic_mu_bar')
     indicators = None
+    estimates = (('eta', 'elliptic_mu_bar'), )
     max_levels = 3
-    _grid_and_problem_data, _d, _d_data, _solution, _solution_as_reference, _config, _cache = {}, {}, {}, {}, {}, {}, {}
 
     def __init__(self, gp_initializer, disc, base_cfg, refine, mu, p_ref=2):
+        self.data = {}
+        (self._grid_and_problem_data, self._d, self._d_data, self._solution, self._solution_as_reference, self._config,
+         self._cache) = {}, {}, {}, {}, {}, {}, {}
         self._grid_and_problem_initializer = gp_initializer
         self._discretizer = disc
         self.mu = mu
@@ -210,7 +270,7 @@ class StationaryEocStudy(EocStudy):
         else:
             assert False
 
-    def compute_indicator(self, level, id):
+    def _compute_estimates(self, level):
         if not level in self._cache:
             mu = self._d[level].parse_parameter(self.mu)
             eta, (eta_ncs, eta_rs, eta_dfs), _ = self._d[level].estimate(self._solution[level], mu=mu, decompose=True)
@@ -218,6 +278,13 @@ class StationaryEocStudy(EocStudy):
                     'eta_nc': np.linalg.norm(eta_ncs),
                     'eta_df': np.linalg.norm(eta_dfs),
                     'eta_r': np.linalg.norm(eta_rs),
-                    'eta': eta}
+                    'eta': eta[0]}
+
+    def compute_indicator(self, level, id):
+        self._compute_estimates(level)
+        return self._cache[level][id]
+
+    def compute_estimate(self, level, id):
+        self._compute_estimates(level)
         return self._cache[level][id]
 
