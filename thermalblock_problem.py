@@ -21,7 +21,7 @@ from dune.xt.grid import (
 from pymor.parameters.functionals import ProjectionParameterFunctional
 
 
-def init_grid_and_problem(config):
+def init_grid_and_problem(config, mu_bar=(1, 1, 1, 1), mu_hat=(1, 1, 1, 1)):
     print('initializing grid and problem ... ', end='')
 
     lower_left = [-1, -1]
@@ -58,9 +58,20 @@ def init_grid_and_problem(config):
 
     kappa = make_constant_function_2x2(grid, [[1., 0.], [0., 1.]], name='kappa')
     f = make_expression_function_1x1(grid, 'x', '0.5*pi*pi*cos(0.5*pi*x[0])*cos(0.5*pi*x[1])', order=2, name='f')
-    lambda_bar = make_constant_function_1x1(grid, 1., name='lambda_bar')
-    lambda_hat = make_constant_function_1x1(grid, 1., name='lambda_hat')
-
+    lambda_bar_values = [[0.]]*(YBLOCKS*XBLOCKS)
+    lambda_hat_values = [[0.]]*(YBLOCKS*XBLOCKS)
+    counter = 0
+    for ix in range(YBLOCKS):
+        for iy in range(XBLOCKS):
+            lambda_bar_values[ix + XBLOCKS*iy] = [coefficients[counter].evaluate(mu_bar)]
+            lambda_hat_values[ix + XBLOCKS*iy] = [coefficients[counter].evaluate(mu_hat)]
+            counter += 1
+    lambda_bar = make_checkerboard_function_1x1(grid_provider=grid, lower_left=lower_left, upper_right=upper_right,
+                                                num_elements=[XBLOCKS, YBLOCKS],
+                                                values=lambda_bar_values, name='lambda_bar')
+    lambda_hat = make_checkerboard_function_1x1(grid_provider=grid, lower_left=lower_left, upper_right=upper_right,
+                                                num_elements=[XBLOCKS, YBLOCKS],
+                                                values=lambda_hat_values, name='lambda_hat')
     print('done')
 
     return {'grid': grid,
@@ -73,9 +84,9 @@ def init_grid_and_problem(config):
             'kappa': kappa,
             'f': f,
             'parameter_type': parameter_type,
-            'mu_bar': (1, 1, 1, 1),
-            'mu_hat': (1, 1, 1, 1),
-            'mu_min': (0.1, 0.1, 0.1, 0.1),
-            'mu_max': (1, 1, 1, 1),
-            'parameter_range': (0.1, 1)}
+            'mu_bar': mu_bar,
+            'mu_hat': mu_hat,
+            'mu_min': (min(0.1, b, h) for b, h in zip(mu_bar, mu_hat)),
+            'mu_max': (max(1, b, h) for b, h in zip(mu_bar, mu_hat)),
+            'parameter_range': (min((0.1,) + mu_bar + mu_hat), max((1,) + mu_bar + mu_hat))}
 
