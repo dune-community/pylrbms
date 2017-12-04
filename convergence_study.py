@@ -65,7 +65,7 @@ class EocStudy:
                 return ' '*(len_ - len(id_)) + id_
 
         def cfill(id_, len_):
-            if len(id_) > len_ - 1:
+            if len(id_) > len_:
                 return id_[:(len_ - 1)] + '.'
             rpadd = int((len_ - len(id_))/2)
             return ' '*(len_ - rpadd - len(id_)) + id_ + ' '*rpadd
@@ -115,7 +115,7 @@ class EocStudy:
             if print_full_estimate:
                 h1 += '| ' + cfill(id, column_width + (len(actual_accuracies) + 1)*(eoc_column_width + 3)) + ' '
             else:
-                h1 += '| ' + cfill(id, (len(actual_accuracies) + 1)*(eoc_column_width + 3) - 2) + ' '
+                h1 += '| ' + cfill(id, (len(actual_accuracies) + 1)*(eoc_column_width + 3) - 3) + ' '
             if print_full_estimate:
                 d1 += '+' + '-'*(column_width + 2)
                 h2 += '| ' + lfill('estimate', column_width) + ' '
@@ -200,9 +200,8 @@ class StationaryEocStudy(EocStudy):
 
     level_info_title = '|grid|/|Grid|'
     accuracies = ('h', 'H')
-    EOC_accuracy = 'h'
     norms = ('L2', 'elliptic_mu_bar')
-    indicators = None
+    indicators = ('eta_nc', 'eta_r', 'eta_df')
     estimates = (('eta', 'elliptic_mu_bar'), )
     max_levels = 3
 
@@ -234,12 +233,16 @@ class StationaryEocStudy(EocStudy):
         self._d[level], self._d_data[level] = self._discretizer(self._grid_and_problem_data[level])
         mu = self._d[level].parse_parameter(self.mu)
         self._solution[level] = self._d[level].solve(mu)
+        if 'reductor' in self._d_data[level]:
+            to_be_prolongated_solution = self._d_data[level]['reductor'].reconstruct(self._solution[level])
+        else:
+            to_be_prolongated_solution = self._solution[level]
         if 'block_space' in self._d_data[level]:
             coarse_solution = make_discrete_function(self._d_data[level]['block_space'],
-                                                     self._d[level].unblock(self._solution[level])._list[0].impl)
+                                                     self._d_data[level]['unblock'](to_be_prolongated_solution)._list[0].impl)
         else:
             coarse_solution = make_discrete_function(self._d_data[level]['space'],
-                                                     self._solution[level]._list[0].impl)
+                                                     to_be_prolongated_solution._list[0].impl)
         self._solution_as_reference[level] = make_discrete_function(self._d_data[-1]['space'])
         prolong(coarse_solution, self._solution_as_reference[level])
 
