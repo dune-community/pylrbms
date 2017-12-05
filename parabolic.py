@@ -69,10 +69,10 @@ UU = reductor.reconstruct(u)
 
 print('Relative model reduction errors:')
 print((U - UU).l2_norm() / U.l2_norm())
-est, (local_eta_nc, local_eta_r, local_eta_df, time_resiudal, time_deriv_nc) = d.estimate(U, mu)
 print()
 
 print('Estimated error FOM:')
+est, (local_eta_nc, local_eta_r, local_eta_df, time_resiudal, time_deriv_nc) = d.estimate(U, mu)
 print('  total estimate:                    {}'.format(est))
 print('  elliptic nonconformity indicator:  {}'.format(np.linalg.norm(local_eta_nc)))
 print('  elliptic residual indicator:       {}'.format(np.linalg.norm(local_eta_r)))

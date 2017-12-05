@@ -13,10 +13,10 @@ def refine(coarse_cfg):
     return cfg
 
 
-def discretize(grid_abd_problem_data):
+def discretize(grid_and_problem_data):
     from discretize_elliptic_block_swipdg import discretize
 
-    d, data = discretize(grid_abd_problem_data)
+    d, data = discretize(grid_and_problem_data)
     return d, {'block_space': data['block_space'], 'unblock': d.unblock}
 
 

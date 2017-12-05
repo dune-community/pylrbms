@@ -14,10 +14,10 @@ def refine(coarse_cfg):
     return cfg
 
 
-def discretize(grid_abd_problem_data, mus):
+def discretize(grid_and_problem_data, mus):
     from discretize_elliptic_block_swipdg import discretize
 
-    d, data = discretize(grid_abd_problem_data)
+    d, data = discretize(grid_and_problem_data)
     reductor = LRBMSReductor(d, products=[d.operators['local_energy_dg_product_{}'.format(ii)]
                                           for ii in range(data['block_space'].num_blocks)])
     for mu in mus:
