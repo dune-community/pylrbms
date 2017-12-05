@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import sys
 import numpy as np
 np.warnings.filterwarnings('ignore')
 
@@ -149,6 +150,7 @@ class EocStudy:
                 self.data[level] = {}
             self.solve(level)
             print(' ' + cfill(self.level_info(level), len(self.level_info_title)) + ' ', end='')
+            sys.stdout.flush()
             # accuracies
             if not 'accuracy' in self.data[level]:
                 self.data[level]['accuracy'] = {}
@@ -156,32 +158,39 @@ class EocStudy:
                 self.data[level]['accuracy'][id] = self.accuracy(level, id)
                 if not only_these or id in only_these:
                     print('| ' + lfill('{:.2e}'.format(self.data[level]['accuracy'][id]), column_width) + ' ', end='')
+                    sys.stdout.flush()
             # norms
             if not 'norm' in self.data[level]:
                 self.data[level]['norm'] = {}
             for id in actual_norms:
                 self.data[level]['norm'][id] = self.compute_norm(level, id)
                 print('| ' + lfill('{:.2e}'.format(self.data[level]['norm'][id]), column_width) + ' ', end='')
+                sys.stdout.flush()
                 for acc_id in actual_accuracies:
                     if level == 0:
                         print('| ' + lfill('----', eoc_column_width) + ' ', end='')
+                        sys.stdout.flush()
                     else:
                         print('| ' + compute_eoc(self.data[level - 1]['norm'][id],
                                                  self.data[level]['norm'][id],
                                                  level, acc_id) + ' ', end='')
+                        sys.stdout.flush()
             # indicators
             if not 'indicator' in self.data[level]:
                 self.data[level]['indicator'] = {}
             for id in actual_indicators:
                 self.data[level]['indicator'][id] = self.compute_indicator(level, id)
                 print('| ' + lfill('{:.2e}'.format(self.data[level]['indicator'][id]), column_width) + ' ', end='')
+                sys.stdout.flush()
                 for acc_id in actual_accuracies:
                     if level == 0:
                         print('| ' + lfill('----', eoc_column_width) + ' ', end='')
+                        sys.stdout.flush()
                     else:
                         print('| ' + compute_eoc(self.data[level - 1]['indicator'][id],
                                                  self.data[level]['indicator'][id],
                                                  level, acc_id) + ' ', end='')
+                        sys.stdout.flush()
             if not 'estimate' in self.data[level]:
                 self.data[level]['estimate'] = {}
             for estimate_id, norm_id in actual_estimates:
@@ -190,16 +199,20 @@ class EocStudy:
                     self.data[level]['norm'][norm_id] = self.compute_norm(level, norm_id)
                 if print_full_estimate:
                     print('| ' + lfill('{:.2e}'.format(self.data[level]['estimate'][estimate_id]), column_width) + ' ', end='')
+                    sys.stdout.flush()
                 print('| ' +
                         lfill('{:.2f}'.format(self.data[level]['norm'][norm_id]/self.data[level]['estimate'][estimate_id]),
                             eoc_column_width) + ' ', end='')
+                sys.stdout.flush()
                 for acc_id in actual_accuracies:
                     if level == 0:
                         print('| ' + lfill('----', eoc_column_width) + ' ', end='')
+                        sys.stdout.flush()
                     else:
                         print('| ' + compute_eoc(self.data[level - 1]['estimate'][estimate_id],
                                                  self.data[level]['estimate'][estimate_id],
                                                  level, acc_id) + ' ', end='')
+                        sys.stdout.flush()
             print()
             if level < self.max_levels:
                 print(delim)
