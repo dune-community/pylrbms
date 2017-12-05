@@ -3,7 +3,7 @@
 from functools import partial
 
 from OS2015_academic_problem import init_grid_and_problem
-from convergence_study import StationaryEocStudy
+from EOC import StationaryEocStudy
 
 
 def refine(coarse_cfg):

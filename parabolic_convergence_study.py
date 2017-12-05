@@ -3,7 +3,7 @@
 from functools import partial
 
 from thermalblock_problem import init_grid_and_problem
-from convergence_study import InstationaryEocStudy
+from EOC import InstationaryEocStudy
 
 
 def refine(coarse_cfg):
