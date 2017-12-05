@@ -224,16 +224,8 @@ class StationaryEocStudy(EocStudy):
         self._config[0] = base_cfg.copy()
         for level in range(1, self.max_levels + 1):
             self._config[level] = refine(self._config[level - 1])
-        # compute reference solution
         self._config[-1] = self._config[self.max_levels].copy()
-        self._grid_and_problem_data[-1] = self._grid_and_problem_initializer(self._config[-1])
-        self._d[-1], self._d_data[-1] = discretize_elliptic_swipdg(self._grid_and_problem_data[-1], p_ref)
-        space = self._d_data[-1]['space']
-        self._solution[-1] = self._d[-1].solve(self._d[-1].parse_parameter(mu))._list[0].impl
-        self._solution[-1] = make_discrete_function(space, self._solution[-1])
-        # prepare error products
-        self._l2_product = self._d[-1].operators['l2'].matrix
-        self._elliptic_mu_bar_product = self._d[-1].operators['elliptic_mu_bar'].matrix
+        self.p_ref = p_ref
 
     def solve(self, level):
         assert level <= self.max_levels
@@ -241,18 +233,6 @@ class StationaryEocStudy(EocStudy):
         self._d[level], self._d_data[level] = self._discretizer(self._grid_and_problem_data[level])
         mu = self._d[level].parse_parameter(self.mu)
         self._solution[level] = self._d[level].solve(mu)
-        if 'reductor' in self._d_data[level]:
-            reconstructed_soluion = self._d_data[level]['reductor'].reconstruct(self._solution[level])
-        else:
-            reconstructed_soluion = self._solution[level]
-        if 'block_space' in self._d_data[level]:
-            coarse_solution = make_discrete_function(self._d_data[level]['block_space'],
-                                                     self._d_data[level]['unblock'](reconstructed_soluion)._list[0].impl)
-        else:
-            coarse_solution = make_discrete_function(self._d_data[level]['space'],
-                                                     reconstructed_soluion._list[0].impl)
-        self._solution_as_reference[level] = make_discrete_function(self._d_data[-1]['space'])
-        prolong(coarse_solution, self._solution_as_reference[level])
 
     def level_info(self, level):
         assert level <= self.max_levels
@@ -273,6 +253,8 @@ class StationaryEocStudy(EocStudy):
             assert False
 
     def compute_norm(self, level, id):
+        self._compute_reference_solution()
+        self._prolong_onto_reference(level)
         diff = self._solution[-1].vector_copy() - self._solution_as_reference[level].vector_copy()
         if id == 'L2':
             return np.sqrt(diff * (self._l2_product * diff))
@@ -280,6 +262,42 @@ class StationaryEocStudy(EocStudy):
             return np.sqrt(diff * (self._elliptic_mu_bar_product * diff))
         else:
             assert False
+
+    def compute_indicator(self, level, id):
+        self._compute_estimates(level)
+        return self._cache[level][id]
+
+    def compute_estimate(self, level, id):
+        self._compute_estimates(level)
+        return self._cache[level][id]
+
+    def _compute_reference_solution(self):
+        if -1 in self._solution:
+            return
+        self._grid_and_problem_data[-1] = self._grid_and_problem_initializer(self._config[-1])
+        self._d[-1], self._d_data[-1] = discretize_elliptic_swipdg(self._grid_and_problem_data[-1], self.p_ref)
+        space = self._d_data[-1]['space']
+        self._solution[-1] = self._d[-1].solve(self._d[-1].parse_parameter(self.mu))._list[0].impl
+        self._solution[-1] = make_discrete_function(space, self._solution[-1])
+        # prepare error products
+        self._l2_product = self._d[-1].operators['l2'].matrix
+        self._elliptic_mu_bar_product = self._d[-1].operators['elliptic_mu_bar'].matrix
+
+    def _prolong_onto_reference(self, level):
+        if level in self._solution_as_reference:
+            return
+        if 'reductor' in self._d_data[level]:
+            reconstructed_soluion = self._d_data[level]['reductor'].reconstruct(self._solution[level])
+        else:
+            reconstructed_soluion = self._solution[level]
+        if 'block_space' in self._d_data[level]:
+            coarse_solution = make_discrete_function(self._d_data[level]['block_space'],
+                                                     self._d_data[level]['unblock'](reconstructed_soluion)._list[0].impl)
+        else:
+            coarse_solution = make_discrete_function(self._d_data[level]['space'],
+                                                     reconstructed_soluion._list[0].impl)
+        self._solution_as_reference[level] = make_discrete_function(self._d_data[-1]['space'])
+        prolong(coarse_solution, self._solution_as_reference[level])
 
     def _compute_estimates(self, level):
         if not level in self._cache:
@@ -290,14 +308,6 @@ class StationaryEocStudy(EocStudy):
                     'eta_df': np.linalg.norm(eta_dfs),
                     'eta_r': np.linalg.norm(eta_rs),
                     'eta': eta[0]}
-
-    def compute_indicator(self, level, id):
-        self._compute_estimates(level)
-        return self._cache[level][id]
-
-    def compute_estimate(self, level, id):
-        self._compute_estimates(level)
-        return self._cache[level][id]
 
 
 class InstationaryEocStudy(EocStudy):
@@ -320,22 +330,9 @@ class InstationaryEocStudy(EocStudy):
         self._config[0] = base_cfg.copy()
         for level in range(1, self.max_levels + 1):
             self._config[level] = refine(self._config[level - 1])
-        # compute reference solution
         self._config[-1] = reference_cfg
-        self._grid_and_problem_data[-1] = self._grid_and_problem_initializer(self._config[-1])
         self._T = self._config[0]['T']
-        dt = self._config[-1]['dt']
-        self._d[-1], self._d_data[-1] = discretize_parabolic_swipdg(
-                self._grid_and_problem_data[-1],
-                self._T,
-                int(self._T / dt) + 1,
-                p_ref)
-        space = self._d_data[-1]['space']
-        self._solution[-1] = self._d[-1].solve(self._d[-1].parse_parameter(mu))
-        self._solution[-1] = tuple(make_discrete_function(space, vec.impl) for vec in self._solution[-1]._list)
-        # prepare error products
-        self._l2_product = self._d[-1].operators['l2'].matrix
-        self._elliptic_mu_bar_product = self._d[-1].operators['elliptic_mu_bar'].matrix
+        self.p_ref = p_ref
 
     def solve(self, level):
         assert level <= self.max_levels
@@ -347,39 +344,6 @@ class InstationaryEocStudy(EocStudy):
                 T,
                 int(T / dt) + 1)
         self._solution[level] = self._d[level].solve(self._d[level].parse_parameter(self.mu))
-        # reconstruct, if reduced
-        if 'reductor' in self._d_data[level]:
-            assert False
-            reconstructed_soluion = self._d_data[level]['reductor'].reconstruct(self._solution[level])
-        else:
-            reconstructed_soluion = self._solution[level]
-        if 'block_space' in self._d_data[level]:
-            coarse_solution = tuple(make_discrete_function(self._d_data[level]['block_space'], vec.impl)
-                                    for vec in self._d_data[level]['unblock'](reconstructed_soluion)._list)
-        else:
-            coarse_solution = tuple(make_discrete_function(self._d_data[level]['space'], vec.impl)
-                                    for vec in reconstructed_soluion._list)
-        # prolong in space
-        coarse_in_time_fine_in_space = tuple(make_discrete_function(self._d_data[-1]['space'])
-                                             for nt in range(len(coarse_solution)))
-        for coarse, fine in zip(coarse_solution, coarse_in_time_fine_in_space):
-            prolong(coarse, fine)
-        # prolong in time
-        coarse_time_grid = OnedGrid(domain=(0., T), num_intervals=(len(self._solution[level]) - 1))
-        fine_time_grid = OnedGrid(domain=(0., T), num_intervals=len(self._solution[-1]) - 1)
-        self._solution_as_reference[level] = [None for ii in fine_time_grid.centers(1)]
-        for n in np.arange(len(fine_time_grid.centers(1))):
-            t_n = fine_time_grid.centers(1)[n]
-            coarse_entity = min((coarse_time_grid.centers(1) <= t_n).nonzero()[0][-1],
-                                coarse_time_grid.size(0) - 1)
-            a = coarse_time_grid.centers(1)[coarse_entity]
-            b = coarse_time_grid.centers(1)[coarse_entity + 1]
-            SF = np.array((1./(a - b)*t_n - b/(a - b), # P1 in tim
-                           1./(b - a)*t_n - a/(b - a)))
-            U_t = coarse_in_time_fine_in_space[coarse_entity].vector_copy()
-            U_t.scal(SF[0][0])
-            U_t.axpy(SF[1][0], coarse_in_time_fine_in_space[coarse_entity + 1].vector_copy())
-            self._solution_as_reference[level][n] = make_discrete_function(self._d_data[-1]['space'], U_t)
 
     def level_info(self, level):
         # return str(level)
@@ -404,6 +368,8 @@ class InstationaryEocStudy(EocStudy):
             assert False
 
     def compute_norm(self, level, id):
+        self._compute_reference_solution()
+        self._prolong_onto_reference(level)
         diff = [ref.vector_copy() - sol.vector_copy()
                 for ref, sol in zip(self._solution[-1], self._solution_as_reference[level])]
         time_norm_id, space_norm_id = id.split('-')
@@ -448,6 +414,69 @@ class InstationaryEocStudy(EocStudy):
         else:
             assert False
 
+    def compute_indicator(self, level, id):
+        self._compute_estimates(level)
+        return self._cache[level][id]
+
+    def compute_estimate(self, level, id):
+        self._compute_estimates(level)
+        return self._cache[level][id]
+
+    def _compute_reference_solution(self):
+        if -1 in self._solution:
+            return
+        self._grid_and_problem_data[-1] = self._grid_and_problem_initializer(self._config[-1])
+        dt = self._config[-1]['dt']
+        self._d[-1], self._d_data[-1] = discretize_parabolic_swipdg(
+                self._grid_and_problem_data[-1],
+                self._T,
+                int(self._T / dt) + 1,
+                self.p_ref)
+        space = self._d_data[-1]['space']
+        self._solution[-1] = self._d[-1].solve(self._d[-1].parse_parameter(self.mu))
+        self._solution[-1] = tuple(make_discrete_function(space, vec.impl) for vec in self._solution[-1]._list)
+        # prepare error products
+        self._l2_product = self._d[-1].operators['l2'].matrix
+        self._elliptic_mu_bar_product = self._d[-1].operators['elliptic_mu_bar'].matrix
+
+    def _prolong_onto_reference(self, level):
+        if level in self._solution_as_reference:
+            return
+        # reconstruct, if reduced
+        if 'reductor' in self._d_data[level]:
+            assert False # not yet implemented
+            reconstructed_soluion = self._d_data[level]['reductor'].reconstruct(self._solution[level])
+        else:
+            reconstructed_soluion = self._solution[level]
+        if 'block_space' in self._d_data[level]:
+            coarse_solution = tuple(make_discrete_function(self._d_data[level]['block_space'], vec.impl)
+                                    for vec in self._d_data[level]['unblock'](reconstructed_soluion)._list)
+        else:
+            coarse_solution = tuple(make_discrete_function(self._d_data[level]['space'], vec.impl)
+                                    for vec in reconstructed_soluion._list)
+        # prolong in space
+        coarse_in_time_fine_in_space = tuple(make_discrete_function(self._d_data[-1]['space'])
+                                             for nt in range(len(coarse_solution)))
+        for coarse, fine in zip(coarse_solution, coarse_in_time_fine_in_space):
+            prolong(coarse, fine)
+        # prolong in time
+        T = self._T
+        coarse_time_grid = OnedGrid(domain=(0., T), num_intervals=(len(self._solution[level]) - 1))
+        fine_time_grid = OnedGrid(domain=(0., T), num_intervals=len(self._solution[-1]) - 1)
+        self._solution_as_reference[level] = [None for ii in fine_time_grid.centers(1)]
+        for n in np.arange(len(fine_time_grid.centers(1))):
+            t_n = fine_time_grid.centers(1)[n]
+            coarse_entity = min((coarse_time_grid.centers(1) <= t_n).nonzero()[0][-1],
+                                coarse_time_grid.size(0) - 1)
+            a = coarse_time_grid.centers(1)[coarse_entity]
+            b = coarse_time_grid.centers(1)[coarse_entity + 1]
+            SF = np.array((1./(a - b)*t_n - b/(a - b), # P1 in tim
+                           1./(b - a)*t_n - a/(b - a)))
+            U_t = coarse_in_time_fine_in_space[coarse_entity].vector_copy()
+            U_t.scal(SF[0][0])
+            U_t.axpy(SF[1][0], coarse_in_time_fine_in_space[coarse_entity + 1].vector_copy())
+            self._solution_as_reference[level][n] = make_discrete_function(self._d_data[-1]['space'], U_t)
+
     def _compute_estimates(self, level):
         if not level in self._cache:
             mu = self._d[level].parse_parameter(self.mu)
@@ -460,12 +489,4 @@ class InstationaryEocStudy(EocStudy):
                     'R_T': np.linalg.norm(time_resiudals),
                     'partial_t_nc': np.linalg.norm(time_derivs_nc),
                     'eta': eta}
-
-    def compute_indicator(self, level, id):
-        self._compute_estimates(level)
-        return self._cache[level][id]
-
-    def compute_estimate(self, level, id):
-        self._compute_estimates(level)
-        return self._cache[level][id]
 
