@@ -1,13 +1,10 @@
-import numpy as np
-
 import dune.gdt
 from dune.gdt import (
         make_elliptic_matrix_operator_istl_row_major_sparse_matrix_double
           as make_elliptic_matrix_operator,
         make_elliptic_swipdg_affine_factor_matrix_operator_istl_row_major_sparse_matrix_double
           as make_elliptic_swipdg_matrix_operator,
-        make_l2_matrix_operator_istl_row_major_sparse_matrix_double
-          as make_l2_matrix_operator,
+        make_l2_matrix_operator,
         make_l2_volume_vector_functional_istl_dense_vector_double
           as make_l2_volume_vector_functional,
         make_system_assembler
@@ -50,7 +47,8 @@ def discretize(grid_and_problem_data, polorder):
     system_ops = [make_elliptic_swipdg_matrix_operator(diffusion_factor, kappa, boundary_info, space, over_integrate)
                   for diffusion_factor in affine_lambda['functions']]
     functional = make_l2_volume_vector_functional(f, space, over_integrate)
-    l2_operator = make_l2_matrix_operator(space)
+    l2_matrix_with_system_pattern = system_ops[0].matrix().copy()
+    l2_operator = make_l2_matrix_operator(l2_matrix_with_system_pattern, space)
     elliptic_ops = [make_elliptic_matrix_operator(diffusion_factor, kappa, space, over_integrate)
                     for diffusion_factor in affine_lambda['functions']]
     # assemble everything in one grid walk
@@ -68,7 +66,7 @@ def discretize(grid_and_problem_data, polorder):
     elliptic_op = LincombOperator([DuneXTMatrixOperator(o.matrix()) for o in elliptic_ops],
                                   affine_lambda['coefficients'])
     rhs = VectorFunctional(op.range.make_array([functional.vector()]))
-    operators = {'l2': DuneXTMatrixOperator(l2_operator.matrix()),
+    operators = {'l2': DuneXTMatrixOperator(l2_matrix_with_system_pattern),
                  'elliptic': elliptic_op,
                  'elliptic_mu_bar': DuneXTMatrixOperator(elliptic_op.assemble(mu=mu_bar).matrix)}
     d = StationaryDiscretization(op, rhs, operators=operators)
