@@ -18,11 +18,13 @@ from dune.xt.grid import (
     make_cube_dd_subdomains_grid__2d_simplex_aluconformgrid as make_grid,
 )
 
+from pymor.core.logger import getLogger
 from pymor.parameters.functionals import ProjectionParameterFunctional
 
 
 def init_grid_and_problem(config, mu_bar=(1, 1, 1, 1), mu_hat=(1, 1, 1, 1)):
-    print('initializing grid and problem ... ', end='')
+    logger = getLogger('thermalblock_problem.thermalblock_problem')
+    logger.info('initializing grid and problem ... ')
 
     lower_left = [-1, -1]
     upper_right = [1, 1]
@@ -72,7 +74,6 @@ def init_grid_and_problem(config, mu_bar=(1, 1, 1, 1), mu_hat=(1, 1, 1, 1)):
     lambda_hat = make_checkerboard_function_1x1(grid_provider=grid, lower_left=lower_left, upper_right=upper_right,
                                                 num_elements=[XBLOCKS, YBLOCKS],
                                                 values=lambda_hat_values, name='lambda_hat')
-    print('done')
 
     return {'grid': grid,
             'boundary_info': all_dirichlet_boundary_info,
