@@ -4,8 +4,7 @@ import numpy as np
 
 from pymor.core.exceptions import ExtensionError
 
-from thermalblock_problem import init_grid_and_problem
-# from OS2015_academic_problem import init_grid_and_problem
+from artificial_channels_problem import init_grid_and_problem
 from discretize_parabolic_block_swipdg import discretize
 from lrbms import ParabolicLRBMSReductor
 
@@ -15,23 +14,21 @@ set_log_levels({'discretize_elliptic_block_swipdg': 'INFO',
                 'pymor.algorithms.gram_schmidt': 'WARN'})
 
 
-config = {'num_coarse_grid_elements': [4, 4],
+config = {'num_coarse_grid_elements': [16, 16],
           'num_grid_refinements': 2,
-          'num_grid_subdomains': [4, 4],
-          'num_grid_oversampling_layers': 2}  # num_grid_oversampling_layers has to exactly cover one subdomain!
+          'num_grid_subdomains': [8, 8],
+          'num_grid_oversampling_layers': 4}  # num_grid_oversampling_layers has to exactly cover one subdomain!
 
 
 grid_and_problem_data = init_grid_and_problem(config)
 grid = grid_and_problem_data['grid']
 
-# for nt in [10, 20, 40, 80]:
-#     d, _ = discretize(grid_and_problem_data, 1., nt)
-#     mu = d.parameter_space.sample_uniformly(1)[0]
+# d, _ = discretize(grid_and_problem_data, 1, 100)
+# for mu in d.parameter_space.sample_uniformly(2):
 #     U = d.solve(mu)
-#     print(d.estimate(U, mu))
+#     d.visualize(U, filename='mu_{}'.format(mu['switch'][0]))
 
-
-d, d_data = discretize(grid_and_problem_data, 1., 10)
+d, d_data = discretize(grid_and_problem_data, 1, 100)
 block_space = d_data['block_space']
 
 
