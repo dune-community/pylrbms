@@ -5,6 +5,7 @@ from pymor.bindings.dunext import DuneXTMatrixOperator
 from pymor.bindings.dunegdt import DuneGDTVisualizer
 from pymor.discretizations.basic import InstationaryDiscretization
 from pymor.operators.constructions import Concatenation
+from pymor.parameters.spaces import CubicParameterSpace
 
 from discretize_elliptic_block_swipdg import DuneDiscretizationBase
 from discretize_elliptic_block_swipdg import discretize as discretize_ell
@@ -41,6 +42,8 @@ class InstationaryDuneDiscretization(DuneDiscretizationBase, InstationaryDiscret
 
 def discretize(grid_and_problem_data, T, nt):
     d, d_data = discretize_ell(grid_and_problem_data)
+    assert isinstance(d.parameter_space, CubicParameterSpace)
+    parameter_range = grid_and_problem_data['parameter_range']
     block_space = d_data['block_space']
     # assemble global L2 product
     l2_mat = d.global_operator.operators[0].matrix.copy()  # to ensure matching pattern
@@ -86,7 +89,7 @@ def discretize(grid_and_problem_data, T, nt):
                                        products=d.products,
                                        operators=operators,
                                        estimator=estimator,
-                                       parameter_space=d.parameter_space,
                                        visualizer=DuneGDTVisualizer(block_space))
+    d = d.with_(parameter_space=CubicParameterSpace(d.parameter_type, parameter_range[0], parameter_range[1]))
 
     return d, d_data
