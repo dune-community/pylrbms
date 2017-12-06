@@ -294,14 +294,6 @@ def discretize(grid_and_problem_data):
     )
     local_all_neumann_boundary_info = make_subdomain_boundary_info(grid, {'type': 'xt.grid.boundaryinfo.allneumann'})
 
-    affine_lambda, kappa, f = (grid_and_problem_data['lambda'],
-                               grid_and_problem_data['kappa'],
-                               grid_and_problem_data['f'])
-    lambda_bar, lambda_hat = grid_and_problem_data['lambda_bar'], grid_and_problem_data['lambda_hat']
-    mu_bar, mu_hat, parameter_range  = (grid_and_problem_data['mu_bar'],
-                                        grid_and_problem_data['mu_hat'],
-                                        grid_and_problem_data['parameter_range'])
-
     block_space = make_block_space(grid)
     global_rt_space = make_rt_space(grid)
     subdomain_rt_spaces = [global_rt_space.restrict_to_dd_subdomain_part(grid, ii)
@@ -326,9 +318,8 @@ def discretize(grid_and_problem_data):
 
     ################ Assemble LHS and RHS
 
-    def discretize_lhs_for_lambda(lambda_):
+    def discretize_lhs(lambda_func):
         local_matrices = [None]*grid.num_subdomains
-        local_vectors = [None]*grid.num_subdomains
         boundary_matrices = {}
         coupling_matrices_in_in = {}
         coupling_matrices_out_out = {}
@@ -338,7 +329,6 @@ def discretize(grid_and_problem_data):
             local_matrices[ii] = Matrix(block_space.local_space(ii).size(),
                                         block_space.local_space(ii).size(),
                                         local_patterns[ii])
-            local_vectors[ii] = Vector(block_space.local_space(ii).size())
             if ii in grid.boundary_subdomains():
                 boundary_matrices[ii] = Matrix(block_space.local_space(ii).size(),
                                                block_space.local_space(ii).size(),
@@ -358,21 +348,15 @@ def discretize(grid_and_problem_data):
                                                                 block_space.local_space(ii).size(),
                                                                 coupling_patterns_out_in[(ii, jj)])
 
-        def assemble_local_contributions(subdomain):
-            ipdg_operator = make_elliptic_swipdg_matrix_operator(lambda_, kappa, local_all_neumann_boundary_info,
-                                                                 local_matrices[subdomain],
-                                                                 block_space.local_space(subdomain), over_integrate=2)
-            l2_functional = make_l2_volume_vector_functional(f, local_vectors[subdomain],
-                                                             block_space.local_space(subdomain), over_integrate=2)
-            local_assembler = make_system_assembler(block_space.local_space(subdomain))
+        for ii in range(grid.num_subdomains):
+            ipdg_operator = make_elliptic_swipdg_matrix_operator(lambda_func, kappa, local_all_neumann_boundary_info,
+                                                                 local_matrices[ii],
+                                                                 block_space.local_space(ii), over_integrate=2)
+            local_assembler = make_system_assembler(block_space.local_space(ii))
             local_assembler.append(ipdg_operator)
-            local_assembler.append(l2_functional)
             local_assembler.assemble()
 
-        for ii in range(grid.num_subdomains):
-            assemble_local_contributions(ii)
-
-        local_ipdg_coupling_operator = make_local_elliptic_swipdg_coupling_operator(lambda_, kappa)
+        local_ipdg_coupling_operator = make_local_elliptic_swipdg_coupling_operator(lambda_func, kappa)
 
         def assemble_coupling_contributions(subdomain, neighboring_subdomain):
             coupling_assembler = block_space.coupling_assembler(subdomain, neighboring_subdomain)
@@ -388,7 +372,7 @@ def discretize(grid_and_problem_data):
                 if ii < jj:  # Assemble primally (visit each coupling only once).
                     assemble_coupling_contributions(ii, jj)
 
-        local_ipdg_boundary_operator = make_local_elliptic_swipdg_boundary_operator(lambda_, kappa)
+        local_ipdg_boundary_operator = make_local_elliptic_swipdg_boundary_operator(lambda_func, kappa)
         apply_on_dirichlet_intersections = make_apply_on_dirichlet_intersections(boundary_info)
 
         def assemble_boundary_contributions(subdomain):
@@ -414,10 +398,8 @@ def discretize(grid_and_problem_data):
                     block_space.mapper.copy_local_to_global(coupling_patterns_out_in[(ii, jj)], jj, ii, global_pattern)
 
         system_matrix = Matrix(block_space.mapper.size, block_space.mapper.size, global_pattern)
-        rhs_vector = Vector(block_space.mapper.size, 0.)
         for ii in range(grid.num_subdomains):
             block_space.mapper.copy_local_to_global(local_matrices[ii], local_patterns[ii], ii, system_matrix)
-            block_space.mapper.copy_local_to_global(local_vectors[ii], ii, rhs_vector)
             if ii in grid.boundary_subdomains():
                 block_space.mapper.copy_local_to_global(boundary_matrices[ii], boundary_patterns[ii],
                                                         ii, ii, system_matrix)
@@ -470,21 +452,47 @@ def discretize(grid_and_problem_data):
                                                source_id='domain_{}'.format(jj),
                                                range_id='domain_{}'.format(ii)) if mat else None
         block_op = BlockOperator(ops)
+        return op, block_op
 
-        rhs = VectorFunctional(op.range.make_array([rhs_vector]))
-        rhss = []
-        for ii in range(grid.num_subdomains):
-            rhss.append(ops[ii, ii].range.make_array([local_vectors[ii]]))
-        block_rhs = VectorFunctional(block_op.range.make_array(rhss))
+    lambda_, kappa = grid_and_problem_data['lambda'], grid_and_problem_data['kappa']
+    if isinstance(lambda_, dict):
+        lambda_funcs = lambda_['functions']
+        lambda_coeffs = lambda_['coefficients']
+    else:
+        lambda_funcs = [lambda_,]
+        lambda_coeffs = [1,]
 
-        return op, block_op, rhs, block_rhs
-
-    ops, block_ops, rhss, block_rhss = zip(*(discretize_lhs_for_lambda(l) for l in affine_lambda['functions']))
-    global_rhs = rhss[0]
-    block_rhs = block_rhss[0]
-    lambda_coeffs = affine_lambda['coefficients']
+    ops, block_ops = zip(*(discretize_lhs(lf) for lf in lambda_funcs))
     global_operator = LincombOperator(ops, lambda_coeffs)
     block_op = LincombOperator(block_ops, lambda_coeffs, name='lhs')
+
+    def discretize_rhs(f_func):
+        local_vectors = [None]*grid.num_subdomains
+        rhs_vector = Vector(block_space.mapper.size, 0.)
+        for ii in range(grid.num_subdomains):
+            local_vectors[ii] = Vector(block_space.local_space(ii).size())
+            l2_functional = make_l2_volume_vector_functional(f_func, local_vectors[ii],
+                                                             block_space.local_space(ii), over_integrate=2)
+            l2_functional.assemble()
+            block_space.mapper.copy_local_to_global(local_vectors[ii], ii, rhs_vector)
+        rhs = VectorFunctional(global_operator.range.make_array([rhs_vector]))
+        rhss = []
+        for ii in range(grid.num_subdomains):
+            rhss.append(block_ops[0]._blocks[ii, ii].range.make_array([local_vectors[ii]]))
+        block_rhs = VectorFunctional(block_op.range.make_array(rhss))
+        return rhs, block_rhs
+
+    f = grid_and_problem_data['f']
+    if isinstance(f, dict):
+        f_funcs = f['functions']
+        f_coeffs = f['coefficients']
+    else:
+        f_funcs = [f,]
+        f_coeffs = [1,]
+    rhss, block_rhss = zip(*(discretize_rhs(ff) for ff in f_funcs))
+    global_rhs = LincombOperator(rhss, f_coeffs)
+    block_rhs = LincombOperator(block_rhss, f_coeffs)
+
     solution_space = block_op.source
 
     ################ Assemble interpolation and reconstruction operators
@@ -499,13 +507,15 @@ def discretize(grid_and_problem_data):
         [BlockDiagonalOperator([FluxReconstructionOperator(ii, block_op.source, grid, block_space, global_rt_space,
                                                            subdomain_rt_spaces, lambda_xi, kappa)
                                 for ii in range(grid.num_subdomains)])
-         for lambda_xi in affine_lambda['functions']],
+         for lambda_xi in lambda_funcs],
         lambda_coeffs,
         name='flux_reconstruction'
     )
 
     ################ Assemble inner products and error estimator operators
 
+    lambda_bar, lambda_hat = grid_and_problem_data['lambda_bar'], grid_and_problem_data['lambda_hat']
+    mu_bar, mu_hat = grid_and_problem_data['mu_bar'], grid_and_problem_data['mu_hat']
     operators = {}
     local_projections = []
     local_rt_projections = []
@@ -533,7 +543,7 @@ def discretize(grid_and_problem_data):
                                   local_dg_space.compute_pattern('face_and_volume'))
         local_energy_product_ops = []
         local_energy_product_coeffs = []
-        for func, coeff in zip(affine_lambda['functions'], affine_lambda['coefficients']):
+        for func, coeff in zip(lambda_funcs, lambda_coeffs):
             local_energy_product_ops.append(make_elliptic_matrix_operator(
                 func, kappa, tmp_local_matrix.copy(), local_dg_space, over_integrate=0))
             local_energy_product_coeffs.append(coeff)
@@ -611,24 +621,26 @@ def discretize(grid_and_problem_data):
                                             name='local_divergence_{}'.format(ii))
         local_div_ops.append(local_div_op)
 
-        ################ Assemble error estimator eoperators -- Nonconformity
+        ################ Assemble error estimator operators -- Nonconformity
 
         operators['nc_{}'.format(ii)] = \
             Concatenation([local_oi_projection.T, local_elliptic_product, local_oi_projection],
                           name='nonconformity_{}'.format(ii))
 
-        ################ Assemble error estimator eoperators -- Residual
+        ################ Assemble error estimator operators -- Residual
 
-        local_div = Concatenation([local_div_op, local_rt_projection])
-        local_rhs = VectorFunctional(block_rhs._array._blocks[ii])
+        if len(f_funcs) == 1:
+            assert f_coeffs[0] == 1
+            local_div = Concatenation([local_div_op, local_rt_projection])
+            local_rhs = VectorFunctional(block_rhs.operators[0]._array._blocks[ii])
 
-        operators['r_fd_{}'.format(ii)] = \
-            Concatenation([local_rhs, local_div], name='r1_{}'.format(ii))
+            operators['r_fd_{}'.format(ii)] = \
+                Concatenation([local_rhs, local_div], name='r1_{}'.format(ii))
 
-        operators['r_dd_{}'.format(ii)] = \
-            Concatenation([local_div.T, local_l2_product, local_div], name='r2_{}'.format(ii))
+            operators['r_dd_{}'.format(ii)] = \
+                Concatenation([local_div.T, local_l2_product, local_div], name='r2_{}'.format(ii))
 
-        ################ Assemble error estimator eoperators -- Diffusive flux
+        ################ Assemble error estimator operators -- Diffusive flux
 
         def assemble_estimator_diffusive_flux_aa(lambda_xi, lambda_xi_prime):
             diffusive_flux_aa_product = make_diffusive_flux_aa_product(
@@ -686,8 +698,8 @@ def discretize(grid_and_problem_data):
 
         operators['df_aa_{}'.format(ii)] = LincombOperator(
             [assemble_estimator_diffusive_flux_aa(lambda_xi, lambda_xi_prime)
-             for lambda_xi in affine_lambda['functions']
-             for lambda_xi_prime in affine_lambda['functions']],
+             for lambda_xi in lambda_funcs
+             for lambda_xi_prime in lambda_funcs],
             [ProductParameterFunctional([c1, c2])
              for c1 in lambda_coeffs
              for c2 in lambda_coeffs],
@@ -696,7 +708,7 @@ def discretize(grid_and_problem_data):
         operators['df_bb_{}'.format(ii)] = assemble_estimator_diffusive_flux_bb()
 
         operators['df_ab_{}'.format(ii)] = LincombOperator(
-            [assemble_estimator_diffusive_flux_ab(lambda_xi) for lambda_xi in affine_lambda['functions']],
+            [assemble_estimator_diffusive_flux_ab(lambda_xi) for lambda_xi in lambda_funcs],
             lambda_coeffs,
             name='diffusive_flux_ab_{}'.format(ii)
         )
@@ -707,8 +719,12 @@ def discretize(grid_and_problem_data):
     min_diffusion_evs = np.array([min_diffusion_eigenvalue(grid, ii, lambda_hat, kappa) for ii in
                                   range(grid.num_subdomains)])
     subdomain_diameters = np.array([subdomain_diameter(grid, ii) for ii in range(grid.num_subdomains)])
-    local_eta_rf_squared = np.array([apply_l2_product(grid, ii, f, f, over_integrate=2) for ii in
-                                     range(grid.num_subdomains)])
+    if len(f_funcs) == 1:
+        assert f_coeffs[0] == 1
+        local_eta_rf_squared = np.array([apply_l2_product(grid, ii, f_funcs[0], f_funcs[0], over_integrate=2) for ii in
+                                         range(grid.num_subdomains)])
+    else:
+        local_eta_rf_squared = None
     estimator = EllipticEstimator(min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs,
                                   mu_bar, mu_hat, fr_op, oi_op)
     l2_product = BlockDiagonalOperator(local_l2_products)
@@ -720,13 +736,14 @@ def discretize(grid_and_problem_data):
     d = DuneDiscretization(global_operator,
                            global_rhs,
                            neighborhoods,
-                           (grid, local_boundary_info, affine_lambda, kappa, f, block_space),
+                           (grid, local_boundary_info, lambda_, kappa, f, block_space),
                            block_op,
                            block_rhs,
                            visualizer=DuneGDTVisualizer(block_space),
                            operators=operators,
                            products={'l2': l2_product},
                            estimator=estimator)
+    parameter_range = grid_and_problem_data['parameter_range']
     d = d.with_(parameter_space=CubicParameterSpace(d.parameter_type, parameter_range[0], parameter_range[1]))
 
     return d, data
