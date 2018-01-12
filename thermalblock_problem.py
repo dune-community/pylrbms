@@ -2,11 +2,6 @@
 
 from itertools import product
 
-from dune.xt.common import init_logger, init_mpi
-init_mpi()
-# init_logger()
-
-
 from dune.xt.functions import (
     make_checkerboard_function_1x1,
     make_constant_function_1x1,
@@ -14,12 +9,13 @@ from dune.xt.functions import (
     make_expression_function_1x1
 )
 from dune.xt.grid import (
-    make_boundary_info_on_dd_subdomain_boundary_layer as make_boundary_info,
-    make_cube_dd_subdomains_grid__2d_simplex_aluconformgrid as make_grid,
+    make_boundary_info_on_dd_subdomain_boundary_layer as make_boundary_info
 )
 
 from pymor.core.logger import getLogger
 from pymor.parameters.functionals import ProjectionParameterFunctional
+
+from grid import make_grid
 
 
 def init_grid_and_problem(config, mu_bar=(1, 1, 1, 1), mu_hat=(1, 1, 1, 1)):
@@ -28,16 +24,11 @@ def init_grid_and_problem(config, mu_bar=(1, 1, 1, 1), mu_hat=(1, 1, 1, 1)):
 
     lower_left = [-1, -1]
     upper_right = [1, 1]
-
     inner_boundary_id = 18446744073709551573
-    grid = make_grid(lower_left=lower_left,
-                     upper_right=upper_right,
-                     num_elements=config['num_coarse_grid_elements'],
-                     num_refinements=config['num_grid_refinements'],
-                     num_partitions=config['num_grid_subdomains'],
-                     num_oversampling_layers=config['num_grid_oversampling_layers'],
-                     inner_boundary_segment_index=inner_boundary_id)
-
+    grid = make_grid((lower_left, upper_right),
+                     config['num_subdomains'],
+                     config['half_num_fine_elements_per_subdomain_and_dim'],
+                     inner_boundary_id)
     all_dirichlet_boundary_info = make_boundary_info(grid, {'type': 'xt.grid.boundaryinfo.alldirichlet'})
 
     XBLOCKS = 2; YBLOCKS = 2

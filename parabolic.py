@@ -14,10 +14,8 @@ set_log_levels({'discretize_elliptic_block_swipdg': 'INFO',
                 'pymor.algorithms.gram_schmidt': 'WARN'})
 
 
-config = {'num_coarse_grid_elements': [16, 16],
-          'num_grid_refinements': 2,
-          'num_grid_subdomains': [8, 8],
-          'num_grid_oversampling_layers': 4}  # num_grid_oversampling_layers has to exactly cover one subdomain!
+config = {'num_subdomains': [8, 8],
+          'half_num_fine_elements_per_subdomain_and_dim': 2}
 
 
 grid_and_problem_data = init_grid_and_problem(config)

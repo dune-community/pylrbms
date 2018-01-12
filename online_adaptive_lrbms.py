@@ -31,10 +31,8 @@ from lrbms import LRBMSReductor
 # [6, 6], 4, [6, 6], 4: 0.585792065793
 # ===========================================================
 
-config = {'num_coarse_grid_elements': [4, 4],
-          'num_grid_refinements': 2,
-          'num_grid_subdomains': [2, 2],
-          'num_grid_oversampling_layers': 4, # num_grid_oversampling_layers has to exactly cover one subdomain!
+config = {'num_subdomains': [2, 2],
+          'half_num_fine_elements_per_subdomain_and_dim': 2}
           'initial_RB_order': 0,
           'enrichment_target_error': 1.,
           'marking_doerfler_theta': 0.8,

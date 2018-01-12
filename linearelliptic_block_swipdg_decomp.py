@@ -15,10 +15,8 @@ set_log_levels({'discretize_elliptic_block_swipdg': 'INFO',
                 'lrbms': 'INFO'})
 
 
-config = {'num_coarse_grid_elements': [4, 4],
-          'num_grid_refinements': 2,
-          'num_grid_subdomains': [4, 4],
-          'num_grid_oversampling_layers': 2} # num_grid_oversampling_layers has to exactly cover one subdomain!
+config = {'num_subdomains': [4, 4],
+          'half_num_fine_elements_per_subdomain_and_dim': 1}
 
 
 grid_and_problem_data = init_grid_and_problem(config)
