@@ -42,8 +42,10 @@ print('  residual indicator:       {} (should be 1.45e-01)'.format(np.linalg.nor
 print('  diffusive flux indicator: {} (should be 3.55e-01)'.format(np.linalg.norm(local_eta_df)))
 print('  estimated error:          {}'.format(eta))
 
-reductor = LRBMSReductor(d, products=[d.operators['local_energy_dg_product_{}'.format(ii)]
-                                      for ii in range(block_space.num_blocks)])
+reductor = LRBMSReductor(d,
+                         products=[d.operators['local_energy_dg_product_{}'.format(ii)]
+                                   for ii in range(block_space.num_blocks)],
+                         num_cpus=2)
 U = d.solution_space.empty()
 for mu in d.parameter_space.sample_uniformly(2)[:5]:
     snapshot = d.solve(mu)

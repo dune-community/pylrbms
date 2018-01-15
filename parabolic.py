@@ -37,8 +37,10 @@ block_space = d_data['block_space']
 #     d.visualize(U, filename='solution_{}'.format(i))
 
 
-reductor = ParabolicLRBMSReductor(d, products=[d.operators['local_energy_dg_product_{}'.format(ii)]
-                                               for ii in range(block_space.num_blocks)])
+reductor = ParabolicLRBMSReductor(d,
+                                  products=[d.operators['local_energy_dg_product_{}'.format(ii)]
+                                            for ii in range(block_space.num_blocks)],
+                                  num_cpus=2)
 
 
 mu = d.parameter_space.sample_randomly(1)[0]

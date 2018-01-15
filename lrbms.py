@@ -10,9 +10,9 @@ from pymor.reductors.system import GenericRBSystemReductor
 
 class LRBMSReductor(GenericRBSystemReductor):
 
-    def __init__(self, d, bases=None, products=None, order=None):
+    def __init__(self, d, bases=None, products=None, order=None, num_cpus=1):
         assert order is None or 0 <= order <= 1
-        super().__init__(d, bases=bases, products=products)
+        super().__init__(d, bases=bases, products=products, num_cpus=num_cpus)
 
         if order is None and bases is None:
             order = 0
