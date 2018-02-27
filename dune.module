@@ -1,0 +1,10 @@
+################################
+# Dune module information file #
+################################
+
+#Name of the module
+Module: pylrbms
+Version: 0.1
+Maintainer: none
+#depending on
+Depends: dune-gdt dune-pybindxi
