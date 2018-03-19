@@ -13,7 +13,24 @@
 
 import sys
 import os
+import glob
 from setuptools import setup, find_packages
+from subprocess import  CalledProcessError, check_call
+
+
+pylrbms_srcdir = '${CMAKE_SOURCE_DIR}'
+pylrbms_bindir = '${CMAKE_BINARY_DIR}'
+pymor_root = os.path.join(pylrbms_srcdir, '../', 'pymor')
+gitlab_url = 'git+https://zivgitlab.uni-muenster.de:{token}@zivgitlab.uni-muenster.de/srave_01/pymor.git@master#egg=pymor-0.5'.format(token=os.environ.get('ZIVGITLAB_TOKEN', 'git'))
+
+try:
+    check_call([os.path.join(pylrbms_bindir, 'dune-env'), 'pip', 'install', '-e', pymor_root])
+except CalledProcessError as e:
+    raise e
+    try:
+        check_call([os.path.join(pylrbms_bindir, 'dune-env'), 'pip', 'install', gitlab_url])
+    except CalledProcessError:
+        pass
 
 setup(name='pylrbms',
       version='0.1',
@@ -26,8 +43,4 @@ setup(name='pylrbms',
       zip_safe = 0,
       package_data = {'': ['*.so']},
       install_requires=['pymor'],
-      dependency_links = [
-        'git+https://zivgitlab.uni-muenster.de:{token}@zivgitlab.uni-muenster.de/srave_01/pymor.git@master#egg=pymor-0.5'
-        .format(token=os.environ.get('ZIVGITLAB_TOKEN', 'git'))
-        ],
-      scripts=[])
+      scripts=glob.glob('scripts/*.py'))

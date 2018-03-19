@@ -25,13 +25,13 @@ add_subdirectory("cmake/modules")
 include(DuneXTInstallPythonPackage)
 # this symlinks all files in python/ to the binary dir and install into the virtualenv from there
 # thereby making the compiled extensions directly usable from the venv
+configure_file(python/setup.py.in ${CMAKE_CURRENT_BINARY_DIR}/python/setup.py)
 dune_xt_install_python_package(PATH python)
 include_dependent_binary_python_dirs()
 # do not change order here
 include(DuneUtils)
-if(dune-pybindxi_FOUND)
-  add_subdirectory(python)
-endif()
+add_subdirectory(python)
+dxt_add_make_dependent_bindings(dune-xt-common dune-xt-la dune-xt-functions dune-xt-grid dune-gdt)
 
 add_pylicense()
 
