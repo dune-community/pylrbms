@@ -42,5 +42,5 @@ setup(name='pylrbms',
       packages = find_packages(),
       zip_safe = 0,
       package_data = {'': ['*.so']},
-      install_requires=['pymor'],
+      install_requires=['pymor', 'mpi4py'],
       scripts=glob.glob('scripts/*.py'))
