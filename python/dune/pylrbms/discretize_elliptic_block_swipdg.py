@@ -1,9 +1,9 @@
 import numpy as np
 
 from dune.xt.grid import (
-    make_apply_on_dirichlet_intersections_dd_subdomain_boundary_part as make_apply_on_dirichlet_intersections,
+    make_apply_on_dirichlet_intersections_dd_subdomain_boundary_view as make_apply_on_dirichlet_intersections,
     make_boundary_info_on_dd_subdomain_layer as make_subdomain_boundary_info,
-    make_walker_on_dd_subdomain_part as make_subdomain_walker
+    make_walker_on_dd_subdomain_view as make_subdomain_walker
 )
 from dune.xt.functions import make_expression_function_1x1
 from dune.xt.la import (
@@ -11,7 +11,23 @@ from dune.xt.la import (
     IstlRowMajorSparseMatrixDouble as Matrix,
     SparsityPatternDefault,
 )
-from dune.gdt import (
+
+import dune.gdt
+
+from dune.gdt.__spaces import make_rt_leaf_view_to_2x1_gdt_p0_space as make_rt_space
+from dune.gdt.__spaces_block import make_block_dg_dd_subdomain_view_to_1x1_gdt_p1_space as make_block_space
+
+from dune.gdt.__local_elliptic_ipdg_operators import (
+    make_local_elliptic_swipdg_affine_factor_boundary_integral_operator_1x1_p1_dg_gdt_space_dd_subdomain_coupling_intersection as make_local_elliptic_swipdg_boundary_operator,
+    make_local_elliptic_swipdg_affine_factor_inner_integral_operator_1x1_p1_dg_gdt_space_dd_subdomain_coupling_intersection as make_local_elliptic_swipdg_coupling_operator,  # NOQA
+)
+from dune.gdt.__discretefunction import make_discrete_function
+from dune.gdt.__operators_l2 import make_l2_matrix_operator
+from dune.gdt.__functionals_l2 import make_l2_volume_vector_functional
+from dune.gdt.__operators_elliptic import make_elliptic_matrix_operator_istl_row_major_sparse_matrix_double as make_elliptic_matrix_operator
+from dune.gdt.__operators_elliptic_ipdg import make_elliptic_swipdg_affine_factor_matrix_operator as make_elliptic_swipdg_matrix_operator
+from dune.gdt.__operators_oswaldinterpolation import apply_oswald_interpolation_operator
+from dune.gdt.__operators_RS2017 import (
     RS2017_apply_diffusive_flux_reconstruction_in_neighborhood as apply_diffusive_flux_reconstruction_in_neighborhood,
     RS2017_make_diffusive_flux_aa_product_matrix_operator_on_subdomain as make_diffusive_flux_aa_product,
     RS2017_make_diffusive_flux_ab_product_matrix_operator_on_subdomain as make_diffusive_flux_ab_product,
@@ -26,19 +42,11 @@ from dune.gdt import (
     RS2017_residual_indicator_min_diffusion_eigenvalue as min_diffusion_eigenvalue,
     RS2017_residual_indicator_subdomain_diameter as subdomain_diameter,
     RS2017_make_divergence_matrix_operator_on_subdomain as make_divergence_matrix_operator_on_subdomain,
-    apply_oswald_interpolation_operator,
-    make_block_dg_dd_subdomain_part_to_1x1_fem_p1_space as make_block_space,
-    make_discrete_function,
-    make_elliptic_matrix_operator_istl_row_major_sparse_matrix_double as make_elliptic_matrix_operator,
-    make_elliptic_swipdg_affine_factor_matrix_operator as make_elliptic_swipdg_matrix_operator,
-    make_l2_matrix_operator,
-    make_l2_volume_vector_functional,
-    make_local_elliptic_swipdg_affine_factor_boundary_integral_operator_1x1_p1_dg_fem_space_dd_subdomain_coupling_intersection as make_local_elliptic_swipdg_boundary_operator,  # NOQA
-    make_local_elliptic_swipdg_affine_factor_inner_integral_operator_1x1_p1_dg_fem_space_dd_subdomain_coupling_intersection as make_local_elliptic_swipdg_coupling_operator,  # NOQA
-    make_rt_leaf_view_to_2x1_pdelab_p0_space as make_rt_space,
-    make_system_assembler,
-    project as dune_project
 )
+
+from dune.gdt.__assembler import  make_system_assembler
+# from XXX import project as dune_project
+
 
 from pymor.bindings.dunegdt import DuneGDTVisualizer
 from pymor.bindings.dunext import DuneXTMatrixOperator, DuneXTVectorSpace
@@ -53,7 +61,7 @@ from pymor.parameters.spaces import CubicParameterSpace
 from pymor.vectorarrays.block import BlockVectorSpace
 
 
-from lrbms import EllipticEstimator
+from dune.pylrbms.lrbms import EllipticEstimator
 
 
 class OswaldInterpolationErrorOperator(OperatorBase):
@@ -282,7 +290,6 @@ class DuneDiscretization(DuneDiscretizationBase, StationaryDiscretization):
 
 
 def discretize(grid_and_problem_data):
-
     ################ Setup
 
     logger = getLogger('discretize_elliptic_block_swipdg.discretize')
@@ -296,7 +303,7 @@ def discretize(grid_and_problem_data):
 
     block_space = make_block_space(grid)
     global_rt_space = make_rt_space(grid)
-    subdomain_rt_spaces = [global_rt_space.restrict_to_dd_subdomain_part(grid, ii)
+    subdomain_rt_spaces = [global_rt_space.restrict_to_dd_subdomain_view(grid, ii)
                            for ii in range(grid.num_subdomains)]
 
     local_patterns = [block_space.local_space(ii).compute_pattern('face_and_volume')
@@ -349,12 +356,12 @@ def discretize(grid_and_problem_data):
                                                                 coupling_patterns_out_in[(ii, jj)])
 
         for ii in range(grid.num_subdomains):
+            ss = block_space.local_space(ii)
+            ll = local_matrices[ii]
             ipdg_operator = make_elliptic_swipdg_matrix_operator(lambda_func, kappa, local_all_neumann_boundary_info,
-                                                                 local_matrices[ii],
-                                                                 block_space.local_space(ii), over_integrate=2)
-            local_assembler = make_system_assembler(block_space.local_space(ii))
-            local_assembler.append(ipdg_operator)
-            local_assembler.assemble()
+                                                                 ll,
+                                                                 ss, over_integrate=2)
+            ipdg_operator.assemble(False)
 
         local_ipdg_coupling_operator = make_local_elliptic_swipdg_coupling_operator(lambda_func, kappa)
 
@@ -496,6 +503,7 @@ def discretize(grid_and_problem_data):
     solution_space = block_op.source
 
     ################ Assemble interpolation and reconstruction operators
+    logger.info('discretizing interpolation ')
 
     # Oswald interpolation error operator
     oi_op = BlockDiagonalOperator([OswaldInterpolationErrorOperator(ii, block_op.source, grid, block_space)
@@ -513,6 +521,7 @@ def discretize(grid_and_problem_data):
     )
 
     ################ Assemble inner products and error estimator operators
+    logger.info('discretizing inner products ')
 
     lambda_bar, lambda_hat = grid_and_problem_data['lambda_bar'], grid_and_problem_data['lambda_hat']
     mu_bar, mu_hat = grid_and_problem_data['mu_bar'], grid_and_problem_data['mu_hat']
@@ -576,7 +585,7 @@ def discretize(grid_and_problem_data):
 
         # assemble local elliptic product
         matrix = make_local_elliptic_matrix_operator(grid, ii,
-                                                     block_space.local_space(ii),
+                                                     local_dg_space,
                                                      lambda_bar, kappa)
         matrix.assemble()
         local_elliptic_product = DuneXTMatrixOperator(matrix.matrix(),
@@ -612,7 +621,7 @@ def discretize(grid_and_problem_data):
         ################ Assemble additional operators for error estimation
 
         # assemble local divergence operator
-        local_rt_space = global_rt_space.restrict_to_dd_subdomain_part(grid, ii)
+        local_rt_space = global_rt_space.restrict_to_dd_subdomain_view(grid, ii)
         local_div_op = make_divergence_matrix_operator_on_subdomain(grid, ii, local_dg_space, local_rt_space)
         local_div_op.assemble()
         local_div_op = DuneXTMatrixOperator(local_div_op.matrix(),

@@ -15,11 +15,11 @@ set_log_levels({'online_adaptive_lrbms': 'DEBUG',
 logger = getLogger('online_adaptive_lrbms.online_adaptive_lrbms')
 from pymor.discretizations.basic import StationaryDiscretization
 
-from OS2015_academic_problem import init_grid_and_problem
+from dune.pylrbms.OS2015_academic_problem import init_grid_and_problem
 # from local_thermalblock_problem import init_grid_and_problem
-from discretize_elliptic_block_swipdg import discretize
-from online_enrichment import AdaptiveEnrichment
-from lrbms import LRBMSReductor
+from dune.pylrbms.discretize_elliptic_block_swipdg import discretize
+from dune.pylrbms.online_enrichment import AdaptiveEnrichment
+from dune.pylrbms.lrbms import LRBMSReductor
 
 # max discretization error, to derive enrichment_target_error
 # ===========================================================
@@ -32,7 +32,7 @@ from lrbms import LRBMSReductor
 # ===========================================================
 
 config = {'num_subdomains': [2, 2],
-          'half_num_fine_elements_per_subdomain_and_dim': 2}
+          'half_num_fine_elements_per_subdomain_and_dim': 2,
           'initial_RB_order': 0,
           'enrichment_target_error': 1.,
           'marking_doerfler_theta': 0.8,
