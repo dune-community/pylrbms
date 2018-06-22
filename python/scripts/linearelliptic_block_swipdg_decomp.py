@@ -6,9 +6,9 @@ import time
 from pymor.core.exceptions import ExtensionError
 
 # from thermalblock_problem import init_grid_and_problem
-from OS2015_academic_problem import init_grid_and_problem
-from discretize_elliptic_block_swipdg import discretize
-from lrbms import LRBMSReductor
+from dune.pylrbms.OS2015_academic_problem import init_grid_and_problem
+from dune.pylrbms.discretize_elliptic_block_swipdg import discretize
+from dune.pylrbms.lrbms import LRBMSReductor
 
 from pymor.core.logger import set_log_levels
 set_log_levels({'discretize_elliptic_block_swipdg': 'INFO',

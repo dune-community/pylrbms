@@ -15,7 +15,7 @@ from dune.xt.grid import (
 from pymor.core.logger import getLogger
 from pymor.parameters.functionals import ProjectionParameterFunctional
 
-from grid import make_grid
+from dune.pylrbms.grid import make_grid
 
 
 def init_grid_and_problem(config, mu_bar=(1, 1, 1, 1), mu_hat=(1, 1, 1, 1)):

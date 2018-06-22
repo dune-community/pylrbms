@@ -2,8 +2,8 @@
 
 from functools import partial
 
-from thermalblock_problem import init_grid_and_problem
-from EOC import InstationaryEocStudy
+from dune.pylrbms.thermalblock_problem import init_grid_and_problem
+from dune.pylrbms.EOC import InstationaryEocStudy
 
 
 def refine(coarse_cfg):
@@ -15,7 +15,7 @@ def refine(coarse_cfg):
 
 
 def discretize(grid_and_problem_data, T, nt):
-    from discretize_parabolic_block_swipdg import discretize
+    from dune.pylrbms.discretize_parabolic_block_swipdg import discretize
 
     d, data = discretize(grid_and_problem_data, T, nt)
     return d, {'block_space': data['block_space'], 'unblock': d.unblock}

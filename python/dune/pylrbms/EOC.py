@@ -16,8 +16,8 @@ from pymor.core.logger import set_log_levels
 set_log_levels({'pymor.discretizations.basic': 'WARN',})
 from pymor.grids.oned import OnedGrid
 
-from discretize_elliptic_swipdg import discretize as discretize_elliptic_swipdg
-from discretize_parabolic_swipdg import discretize as discretize_parabolic_swipdg
+from dune.pylrbms.discretize_elliptic_swipdg import discretize as discretize_elliptic_swipdg
+from dune.pylrbms.discretize_parabolic_swipdg import discretize as discretize_parabolic_swipdg
 
 
 class EocStudy:

@@ -2,9 +2,9 @@
 
 from functools import partial
 
-from OS2015_academic_problem import init_grid_and_problem
-from EOC import StationaryEocStudy
-from lrbms import LRBMSReductor
+from dune.pylrbms.OS2015_academic_problem import init_grid_and_problem
+from dune.pylrbms.EOC import StationaryEocStudy
+from dune.pylrbms.lrbms import LRBMSReductor
 
 
 def refine(coarse_cfg):
@@ -15,7 +15,7 @@ def refine(coarse_cfg):
 
 
 def discretize(grid_and_problem_data, mus):
-    from discretize_elliptic_block_swipdg import discretize
+    from dune.pylrbms.discretize_elliptic_block_swipdg import discretize
 
     d, data = discretize(grid_and_problem_data)
     reductor = LRBMSReductor(d, products=[d.operators['local_energy_dg_product_{}'.format(ii)]

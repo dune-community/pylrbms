@@ -3,7 +3,7 @@ from pymor.bindings.dunegdt import DuneGDTVisualizer
 from pymor.discretizations.basic import InstationaryDiscretization
 from pymor.parameters.spaces import CubicParameterSpace
 
-from discretize_elliptic_swipdg import discretize as discretize_stationary
+from dune.pylrbms.discretize_elliptic_swipdg import discretize as discretize_stationary
 
 
 def discretize(grid_and_problem_data, T, nt, polorder):
