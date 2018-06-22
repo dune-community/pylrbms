@@ -36,7 +36,8 @@ config = {'num_subdomains': [2, 2],
           'initial_RB_order': 0,
           'enrichment_target_error': 1.,
           'marking_doerfler_theta': 0.8,
-          'marking_max_age': 2}
+          'marking_max_age': 2,
+          'grid_type': 'alu'}
 
 
 grid_and_problem_data = init_grid_and_problem(config)

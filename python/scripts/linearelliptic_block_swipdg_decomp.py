@@ -16,7 +16,8 @@ set_log_levels({'discretize_elliptic_block_swipdg': 'INFO',
 
 
 config = {'num_subdomains': [4, 4],
-          'half_num_fine_elements_per_subdomain_and_dim': 1}
+          'half_num_fine_elements_per_subdomain_and_dim': 1,
+          'grid_type': 'alu'}
 
 
 grid_and_problem_data = init_grid_and_problem(config)

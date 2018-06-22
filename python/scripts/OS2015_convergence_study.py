@@ -26,13 +26,18 @@ print('=========================================================================
 print('Block SWIPDG P1')
 print()
 
+config ={'num_coarse_grid_elements': [4, 4],
+         'num_grid_refinements': 2,
+         'num_grid_subdomains': [2, 2],
+         'num_grid_oversampling_layers': 1,
+         'half_num_fine_elements_per_subdomain_and_dim': 2,
+         'num_subdomains': [2, 2],
+         'grid_type': 'alu'}
+
 OS2015_all_mus_equal_study = StationaryEocStudy(
         init_grid_and_problem,
         discretize,
-        {'num_coarse_grid_elements': [4, 4],
-         'num_grid_refinements': 2,
-         'num_grid_subdomains': [2, 2],
-         'num_grid_oversampling_layers': 1},
+        config,
         refine,
         mu=1)
 
@@ -48,10 +53,7 @@ print('p. A2886, Table 2, \'eta_df\' and \'eta\' (mu_hat=0.1)')
 StationaryEocStudy(
         partial(init_grid_and_problem, mu_bar=1, mu_hat=0.1),
         discretize,
-        {'num_coarse_grid_elements': [4, 4],
-         'num_grid_refinements': 2,
-         'num_grid_subdomains': [2, 2],
-         'num_grid_oversampling_layers': 1},
+        config,
         refine,
         mu=1).run(('h', 'eta_df', 'eta'))
 print()
@@ -60,10 +62,7 @@ print('p. A2886, Table 3')
 StationaryEocStudy(
         partial(init_grid_and_problem, mu_bar=0.1, mu_hat=0.1),
         discretize,
-        {'num_coarse_grid_elements': [4, 4],
-         'num_grid_refinements': 2,
-         'num_grid_subdomains': [2, 2],
-         'num_grid_oversampling_layers': 1},
+        config,
         refine,
         mu=1).run(('h', 'elliptic_mu_bar', 'eta_nc', 'eta'))
 print()

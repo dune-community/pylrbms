@@ -9,7 +9,7 @@ from dune.pylrbms.EOC import InstationaryEocStudy
 def refine(coarse_cfg):
     cfg = coarse_cfg.copy()
     cfg['num_grid_refinements'] += 2
-    cfg['num_grid_subdomains'] = [s*2 for s in coarse_cfg['num_grid_subdomains']]
+    cfg['num_subdomains'] = [s*2 for s in coarse_cfg['num_subdomains']]
     cfg['dt'] = 0.1 * init_grid_and_problem(cfg)['grid'].max_entity_diameter()
     return cfg
 
@@ -23,8 +23,10 @@ def discretize(grid_and_problem_data, T, nt):
 
 base_cfg = {'num_coarse_grid_elements': [4, 4],
             'num_grid_refinements': 2,
-            'num_grid_subdomains': [2, 2],
+            'num_subdomains': [2, 2],
+            'half_num_fine_elements_per_subdomain_and_dim': 2,
             'num_grid_oversampling_layers': 1,
+            'grid_type': 'alu',
             'T': 1}
 base_cfg['dt'] = 0.1 * init_grid_and_problem(base_cfg)['grid'].max_entity_diameter()
 
