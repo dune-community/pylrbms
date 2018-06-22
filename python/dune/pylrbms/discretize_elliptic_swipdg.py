@@ -38,7 +38,7 @@ def discretize(grid_and_problem_data, polorder):
                                         grid_and_problem_data['parameter_range'])
 
     # create discrete function space
-    make_space = 'make_dg_leaf_part_to_1x1_fem_p{}_space'.format(polorder)
+    make_space = 'make_dg_leaf_view_to_1x1_gdt_p{}_space'.format(polorder)
     if not make_space in dune.gdt.__dict__:
         raise RuntimeError('Not available for polynomial order {}!'.format(polorder))
     make_space = dune.gdt.__dict__[make_space]
