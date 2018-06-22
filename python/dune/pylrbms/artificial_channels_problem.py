@@ -5,7 +5,7 @@ from itertools import product
 from dune.xt.functions import (
     make_constant_function_1x1,
     make_constant_function_2x2,
-    make_indicator_function_to_1x1
+    make_indicator_function_1x1
 )
 from dune.xt.grid import (
     make_boundary_info_on_dd_subdomain_boundary_layer as make_boundary_info
@@ -52,15 +52,15 @@ def init_grid_and_problem(config, mu_bar=(1,), mu_hat=(1,)):
         return [[[[1/16, 3/8 + 1/32], [1/4 - 1/16, 5/8 - 1/32]], value],
                 [[[3/4 + 1/16, 3/8 + 1/32], [1 - 1/16, 5/8 - 1/32]], value]]
 
-    diffusion_horizontal_channels = make_indicator_function_to_1x1(
+    diffusion_horizontal_channels = make_indicator_function_1x1(
             grid,
             horizontal_channels(1),
             'horizontal_channels')
-    diffusion_fixed_vertical_connections = make_indicator_function_to_1x1(
+    diffusion_fixed_vertical_connections = make_indicator_function_1x1(
             grid,
             fixed_vertical_connections(1),
             'fixed_vertical_connections')
-    diffusion_switched_vertical_connections_right = make_indicator_function_to_1x1(
+    diffusion_switched_vertical_connections_right = make_indicator_function_1x1(
             grid,
             switched_vertical_connections(1),
             'switched_vertical_connections')
@@ -85,11 +85,11 @@ def init_grid_and_problem(config, mu_bar=(1,), mu_hat=(1,)):
                                           coordinates=(0,))]
     kappa = make_constant_function_2x2(grid, [[1., 0.], [0., 1.]], name='kappa')
     f_functions = [
-            make_indicator_function_to_1x1(
+            make_indicator_function_1x1(
                 grid,
                 [[[[1/16, 5/8 + 1/32], [1/4 - 1/16, 7/8 - 1/32]], 1],],
                 'top_left'),
-            make_indicator_function_to_1x1(
+            make_indicator_function_1x1(
                 grid,
                 [[[[3/4 + 1/16, 1/8 + 1/32], [1 - 1/16, 3/8 - 1/32]], 1],
                  [[[3/4 + 1/16, 5/8 + 1/32], [1 - 1/16, 7/8 - 1/32]], 1]],
@@ -100,12 +100,12 @@ def init_grid_and_problem(config, mu_bar=(1,), mu_hat=(1,)):
 
     def create_lambda(mu):
         return (  make_constant_function_1x1(grid, mu_min)
-                - make_indicator_function_to_1x1(grid, horizontal_channels(mu_min))
-                - make_indicator_function_to_1x1(grid, fixed_vertical_connections(mu_min))
-                - make_indicator_function_to_1x1(grid, switched_vertical_connections(mu_min))
-                + make_indicator_function_to_1x1(grid, horizontal_channels(mu_max))
-                + make_indicator_function_to_1x1(grid, fixed_vertical_connections(mu_max))
-                + make_indicator_function_to_1x1(grid, switched_vertical_connections(mu[0])))
+                - make_indicator_function_1x1(grid, horizontal_channels(mu_min))
+                - make_indicator_function_1x1(grid, fixed_vertical_connections(mu_min))
+                - make_indicator_function_1x1(grid, switched_vertical_connections(mu_min))
+                + make_indicator_function_1x1(grid, horizontal_channels(mu_max))
+                + make_indicator_function_1x1(grid, fixed_vertical_connections(mu_max))
+                + make_indicator_function_1x1(grid, switched_vertical_connections(mu[0])))
 
     return {'grid': grid,
             'boundary_info': all_dirichlet_boundary_info,
