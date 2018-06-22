@@ -361,7 +361,7 @@ def discretize(grid_and_problem_data):
             ipdg_operator = make_elliptic_swipdg_matrix_operator(lambda_func, kappa, local_all_neumann_boundary_info,
                                                                  ll,
                                                                  ss, over_integrate=2)
-            ipdg_operator.assemble(False)
+            ipdg_operator.assemble()
 
         local_ipdg_coupling_operator = make_local_elliptic_swipdg_coupling_operator(lambda_func, kappa)
 
@@ -563,11 +563,9 @@ def discretize(grid_and_problem_data):
             local_energy_product_coeffs.append(coeff)
         local_l2_product = make_l2_matrix_operator(tmp_local_matrix.copy(), local_dg_space)
         del tmp_local_matrix
-        local_assembler = make_system_assembler(local_dg_space)
         for local_product_op in local_energy_product_ops:
-            local_assembler.append(local_product_op)
-        local_assembler.append(local_l2_product)
-        local_assembler.assemble()
+            local_l2_product.append(local_product_op)
+        local_l2_product.assemble()
         local_energy_product_name = 'local_energy_dg_product_{}'.format(ii)
         local_energy_product = LincombOperator([DuneXTMatrixOperator(op.matrix(),
                                                                      source_id='domain_{}'.format(ii),
