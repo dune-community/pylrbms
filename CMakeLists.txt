@@ -31,6 +31,7 @@ include_dependent_binary_python_dirs()
 # do not change order here
 include(DuneUtils)
 add_subdirectory(python)
+add_subdirectory(dune/pylrbms/test)
 dxt_add_make_dependent_bindings(dune-xt-common dune-xt-la dune-xt-functions dune-xt-grid dune-gdt)
 
 add_pylicense()
