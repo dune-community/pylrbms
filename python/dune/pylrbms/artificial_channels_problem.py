@@ -7,7 +7,7 @@ from dune.xt.functions import (
     make_constant_function_2x2,
     make_indicator_function_1x1
 )
-from dune.xt.grid import (
+from dune.xt.grid.boundaryinfo import (
     make_boundary_info_on_dd_subdomain_boundary_layer as make_boundary_info
 )
 

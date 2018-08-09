@@ -1,10 +1,10 @@
 import numpy as np
 
-from dune.xt.grid import (
+from dune.xt.grid.walker import (
     make_apply_on_dirichlet_intersections_dd_subdomain_boundary_view as make_apply_on_dirichlet_intersections,
-    make_boundary_info_on_dd_subdomain_layer as make_subdomain_boundary_info,
     make_walker_on_dd_subdomain_view as make_subdomain_walker
 )
+from dune.xt.grid.boundaryinfo import make_boundary_info_on_dd_subdomain_layer as make_subdomain_boundary_info
 from dune.xt.functions import make_expression_function_1x1
 from dune.xt.la import (
     IstlDenseVectorDouble as Vector,

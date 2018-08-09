@@ -3,7 +3,7 @@
 from itertools import product
 import dune
 
-from dune.xt.grid import (
+from dune.xt.grid.boundaryinfo import (
     make_boundary_info_on_dd_subdomain_boundary_layer as make_boundary_info
 )
 
