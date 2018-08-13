@@ -7,5 +7,5 @@
 #   Rene Milk (2018)
 # ~~~
 
-dune_pybindxi_add_module(_bindings EXCLUDE_FROM_ALL bindings.cc)
 
+dune_pybindxi_add_module(_bindings EXCLUDE_FROM_ALL bindings.cc)
