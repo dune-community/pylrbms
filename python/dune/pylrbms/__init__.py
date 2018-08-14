@@ -1,1 +1,1 @@
-from dune._prlm import *
+from dune.pylrbms._bindings import *

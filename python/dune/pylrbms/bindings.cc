@@ -16,6 +16,5 @@
 PYBIND11_MODULE(_bindings, m)
 {
   namespace py = pybind11;
-
   Dune::XT::Common::bindings::add_initialization(m, "dune.pylrbms");
 }
