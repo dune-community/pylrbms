@@ -17,7 +17,7 @@ from dune.xt.grid.boundaryinfo import (
 from pymor.core.logger import getLogger
 from pymor.parameters.functionals import ExpressionParameterFunctional
 
-from grid import make_grid
+from dune.pylrbms.grid import make_grid
 
 
 def init_grid_and_problem(config):
