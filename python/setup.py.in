@@ -32,7 +32,7 @@ except CalledProcessError as e:
     except CalledProcessError:
         pass
 
-setup(name='pylrbms',
+setup(name='dune.pylrbms',
       version='0.1',
       namespace_packages=['dune'],
       description='LRBMS with pyMOR and dune-gdt',
