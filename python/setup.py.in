@@ -42,5 +42,5 @@ setup(name='dune.pylrbms',
       packages = find_packages(),
       zip_safe = 0,
       package_data = {'': ['*.so']},
-      install_requires=['pymor', 'mpi4py'],
+      install_requires=['pymor', 'mpi4py', 'sympy==1.1.1', 'matplotlib'],
       scripts=glob.glob('scripts/*.py'))
