@@ -1,4 +1,5 @@
 import numpy as np
+from mpi4py import MPI
 
 from dune.xt.grid.walker import (
     make_apply_on_dirichlet_intersections_dd_subdomain_boundary_view as make_apply_on_dirichlet_intersections,
@@ -14,8 +15,8 @@ from dune.xt.la import (
 
 import dune.gdt
 
-from dune.gdt.__spaces import make_rt_leaf_view_to_2x1_gdt_p0_space as make_rt_space
-from dune.gdt.__spaces_block import make_block_dg_dd_subdomain_view_to_1x1_gdt_p1_space as make_block_space
+from dune.gdt.spaces import make_rt_leaf_view_to_2x1_gdt_p0_space as make_rt_space
+from dune.gdt.spaces import make_block_dg_space
 
 from dune.gdt.__local_elliptic_ipdg_operators import (
     make_local_elliptic_swipdg_affine_factor_boundary_integral_operator_1x1_p1_dg_gdt_space_dd_subdomain_coupling_intersection as make_local_elliptic_swipdg_boundary_operator,
@@ -45,8 +46,6 @@ from dune.gdt.__operators_RS2017 import (
 )
 
 from dune.gdt.__assembler import  make_system_assembler
-# from XXX import project as dune_project
-
 
 from pymor.bindings.dunegdt import DuneGDTVisualizer
 from pymor.bindings.dunext import DuneXTMatrixOperator, DuneXTVectorSpace
@@ -201,12 +200,13 @@ class DuneDiscretization(DuneDiscretizationBase, StationaryDiscretization):
                  enrichment_data,  # = grid, local_boundary_info, affine_lambda, kappa, f, block_space
                  operator, rhs,
                  products=None, operators=None,
-                 parameter_space=None, estimator=None, visualizer=None, cache_region=None, name=None):
+                 parameter_space=None, estimator=None, visualizer=None, cache_region=None, name=None, data=None):
         super().__init__(operator, rhs, products=products, operators=operators,
                          parameter_space=parameter_space, estimator=estimator, visualizer=visualizer,
                          cache_region=cache_region, name=name)
         self.global_operator, self.global_rhs, self.neighborhoods, self.enrichment_data = \
             global_operator, global_rhs, neighborhoods, enrichment_data
+        self.data = data
 
     def _solve(self, mu):
         if not self.logging_disabled:
@@ -301,7 +301,7 @@ def discretize(grid_and_problem_data):
     )
     local_all_neumann_boundary_info = make_subdomain_boundary_info(grid, {'type': 'xt.grid.boundaryinfo.allneumann'})
 
-    block_space = make_block_space(grid)
+    block_space = make_block_dg_space(grid)
     global_rt_space = make_rt_space(grid)
     subdomain_rt_spaces = [global_rt_space.restrict_to_dd_subdomain_view(grid, ii)
                            for ii in range(grid.num_subdomains)]
@@ -722,7 +722,8 @@ def discretize(grid_and_problem_data):
             name='diffusive_flux_ab_{}'.format(ii)
         )
 
-    ################ Finally assembly
+    ################ Final assembly
+    logger.info('final assembly ')
 
     # instantiate error estimator
     min_diffusion_evs = np.array([min_diffusion_eigenvalue(grid, ii, lambda_hat, kappa) for ii in
@@ -751,8 +752,10 @@ def discretize(grid_and_problem_data):
                            visualizer=DuneGDTVisualizer(block_space),
                            operators=operators,
                            products={'l2': l2_product},
-                           estimator=estimator)
+                           estimator=estimator,
+                           data=data)
     parameter_range = grid_and_problem_data['parameter_range']
+    logger.info('final assembly B')
     d = d.with_(parameter_space=CubicParameterSpace(d.parameter_type, parameter_range[0], parameter_range[1]))
-
+    logger.info('final assembly C')
     return d, data

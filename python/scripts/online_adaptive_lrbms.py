@@ -37,15 +37,15 @@ config = {'num_subdomains': [2, 2],
           'enrichment_target_error': 1.,
           'marking_doerfler_theta': 0.8,
           'marking_max_age': 2,
-          'grid_type': 'alu'}
+          'grid_type': 'yasp'}
 
 
 grid_and_problem_data = init_grid_and_problem(config)
 grid = grid_and_problem_data['grid']
-# grid.visualize('grid', False)
+grid.visualize('grid', False)
 
-d, d_data = discretize(grid_and_problem_data)
-block_space = d_data['block_space']
+d, data = discretize(grid_and_problem_data)
+block_space = data['block_space']
 d.disable_logging()
 
 # logger.info('estimating some errors:')

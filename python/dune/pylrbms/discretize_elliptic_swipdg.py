@@ -1,4 +1,4 @@
-import dune.gdt
+from dune.gdt.spaces import make_dg_space
 from dune.gdt import (
         make_elliptic_matrix_operator_istl_row_major_sparse_matrix_double
           as make_elliptic_matrix_operator,
@@ -36,13 +36,7 @@ def discretize(grid_and_problem_data, polorder):
     mu_bar, mu_hat, parameter_range  = (grid_and_problem_data['mu_bar'],
                                         grid_and_problem_data['mu_hat'],
                                         grid_and_problem_data['parameter_range'])
-
-    # create discrete function space
-    make_space = 'make_dg_leaf_view_to_1x1_gdt_p{}_space'.format(polorder)
-    if not make_space in dune.gdt.__dict__:
-        raise RuntimeError('Not available for polynomial order {}!'.format(polorder))
-    make_space = dune.gdt.__dict__[make_space]
-    space = make_space(grid)
+    space = make_dg_space(grid)
     # prepare operators and functionals
     if isinstance(_lambda, dict):
         system_ops = [make_elliptic_swipdg_matrix_operator(lambda_func, kappa, boundary_info, space, over_integrate)

@@ -3,10 +3,6 @@
 from itertools import product
 import dune
 
-from dune.xt.grid.boundaryinfo import (
-    make_boundary_info_on_dd_subdomain_boundary_layer as make_boundary_info
-)
-
 from dune.xt.functions import (
     make_checkerboard_function_1x1,
     make_constant_function_1x1,
@@ -17,7 +13,7 @@ from dune.xt.functions import (
 from pymor.core.logger import getLogger
 from pymor.parameters.functionals import ExpressionParameterFunctional
 
-from dune.pylrbms.grid import make_grid
+from dune.pylrbms.grid import make_grid, make_boundary_info
 
 
 def init_grid_and_problem(config, mu_bar = 1, mu_hat = 1):
