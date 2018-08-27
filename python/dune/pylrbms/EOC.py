@@ -6,11 +6,11 @@ np.warnings.filterwarnings('ignore')
 
 import itertools
 
+from dune.gdt.discretefunction import make_discrete_function
 from dune.gdt import (
-        make_discrete_function,
         prolong,
-        RS2017_residual_indicator_subdomain_diameter as subdomain_diameter,
         )
+from dune.gdt.playground.operators.rs2017 import RS2017_residual_indicator_subdomain_diameter as subdomain_diameter
 
 from pymor.core.logger import set_log_levels
 set_log_levels({'pymor.discretizations.basic': 'WARN',})
