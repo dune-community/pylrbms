@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+from mpi4py import MPI
 from itertools import product
 import dune
 
@@ -16,7 +16,8 @@ from pymor.parameters.functionals import ExpressionParameterFunctional
 from dune.pylrbms.grid import make_grid, make_boundary_info
 
 
-def init_grid_and_problem(config, mu_bar = 1, mu_hat = 1):
+def init_grid_and_problem(config, mu_bar = 1, mu_hat = 1, mpi_comm = MPI.COMM_WORLD):
+    # assert mpi_comm.Get_size() < MPI.COMM_WORLD.Get_size() or mpi_comm.Get_size() == 1
     logger = getLogger('OS2015_academic_problem.OS2015_academic_problem')
     logger.info('initializing grid and problem ... ')
 
@@ -26,7 +27,8 @@ def init_grid_and_problem(config, mu_bar = 1, mu_hat = 1):
     grid = make_grid((lower_left, upper_right),
                      config['num_subdomains'],
                      config['half_num_fine_elements_per_subdomain_and_dim'],
-                     inner_boundary_id, grid_type=config['grid_type'])
+                     inner_boundary_id, grid_type=config['grid_type'],
+                     mpi_comm=mpi_comm)
     all_dirichlet_boundary_info = make_boundary_info(grid, {'type': 'xt.grid.boundaryinfo.alldirichlet'})
 
     diffusion_functions = [make_expression_function_1x1(
@@ -45,6 +47,7 @@ def init_grid_and_problem(config, mu_bar = 1, mu_hat = 1):
         grid, 'x', '1+(1-{})*(cos(0.5*pi*x[0])*cos(0.5*pi*x[1]))'.format(mu_hat), order=2, name='lambda_bar')
 
     return {'grid': grid,
+            'mpi_comm': mpi_comm,
             'boundary_info': all_dirichlet_boundary_info,
             'inner_boundary_id': inner_boundary_id,
             'lambda': {'functions': diffusion_functions,
