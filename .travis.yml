@@ -16,7 +16,7 @@ language: generic
 services: docker
 
 before_script:
-    - export IMAGE="dunecommunity/${MY_MODULE}-testing_${DOCKER_TAG}:${TRAVIS_BRANCH}"
+    - export IMAGE="dunecommunity/${MY_MODULE}-testing_${DOCKER_TAG}:854796abe6020ba727ff38577aaa8191c67545ab"
     - ./.travis.add_swap.bash 2000 &
     # get image with fallback to master branch of the super repo
     - docker pull ${IMAGE} || export IMAGE="dunecommunity/${MY_MODULE}-testing_${DOCKER_TAG}:master" ; docker pull ${IMAGE}
