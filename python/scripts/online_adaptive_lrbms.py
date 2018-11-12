@@ -11,7 +11,9 @@ set_log_levels({'online_adaptive_lrbms': 'DEBUG',
                 'discretize_elliptic_block_swipdg': 'DEBUG',
                 'offline': 'INFO',
                 'pymor.operators.constructions': 'DEBUG',
-'pymor.bindings6.dunext': 'DEBUG',
+                'dune.pylrbms.discretize_elliptic_block_swipdg': 'DEBUG',
+                'dune.pylrbms': 'DEBUG',
+                'pymor.bindings.dunext': 'DEBUG',
                 'online_enrichment': 'DEBUG',
                 'lrbms': 'DEBUG'})
 logger = getLogger('online_adaptive_lrbms.online_adaptive_lrbms')
@@ -44,7 +46,7 @@ config = {'num_subdomains': [1, 1],
 
 grid_and_problem_data = init_grid_and_problem(config)
 grid = grid_and_problem_data['grid']
-grid.visualize('grid', False)
+# grid.visualize('grid', False)
 
 solver_options = {'max_iter': '400', 'precision': '1e-10', 'post_check_solves_system': '1e-5', 'type': 'bicgstab.ilut',
  'verbose': '4', 'preconditioner.iterations': '2', 'preconditioner.relaxation_factor': '1.0', }
@@ -78,14 +80,14 @@ reductor = LRBMSReductor(
 )
 
 
-# logger.info('adding some global solution snapshots to reduced basis ...')
-# for mu in (grid_and_problem_data['mu_min'], grid_and_problem_data['mu_max']):
-#     U = LRBMS_d.solve(mu)
-#     try:
-#         reductor.extend_basis(U)
-#     except ExtensionError:
-#         pass
-# logger.info('')
+logger.info('adding some global solution snapshots to reduced basis ...')
+for mu in (grid_and_problem_data['mu_min'], grid_and_problem_data['mu_max']):
+    U = LRBMS_d.solve(mu)
+    try:
+        reductor.extend_basis(U)
+    except ExtensionError:
+        pass
+logger.info('')
 
 
 with logger.block('reducing ...') as _:
@@ -97,6 +99,7 @@ with logger.block('estimating some reduced errors:') as _:
         mu = rd.parse_parameter(mu)
         logger.info('{} ... '.format(mu))
         U = rd.solve(mu)
+        # rd.visualize(U, filename=str(mu))
         estimate = rd.estimate(U, mu=mu)
         logger.info('    {}'.format(estimate))
 logger.info('')
@@ -114,3 +117,5 @@ logger.info('local basis sizes:')
 for name, basis in online_adaptive_LRBMS.reductor.bases.items():
     logger.info('{}: {}'.format(name, len(basis)))
 logger.info('finished')
+
+
