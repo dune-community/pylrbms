@@ -39,7 +39,7 @@ config = {'num_subdomains': [1, 1],
           'enrichment_target_error': 1.,
           'marking_doerfler_theta': 0.8,
           'marking_max_age': 2,
-          'grid_type': 'yasp'}
+          'grid_type': 'alu'}
 
 
 grid_and_problem_data = init_grid_and_problem(config)
