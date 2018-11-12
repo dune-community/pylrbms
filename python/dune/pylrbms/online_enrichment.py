@@ -68,8 +68,11 @@ class AdaptiveEnrichment(BasicInterface):
         rb_size = self.rd.solution_space.dim
         with self.logger.block('solving {}-dimensional system for mu = {} ...'.format(rb_size, mu)) as _:
             while True:
+                self.logger.info('A FOO')
                 U = self.rd.solve(mu)
+                self.logger.info('B FOO')
                 eta, _, indicators = self.estimate(U, mu=mu, decompose=True)
+                self.logger.info('C FOO')
                 if callback:
                     callback(self.rd, U, mu, {'eta': eta,
                                               'local_problem_solves': local_problem_solves,
