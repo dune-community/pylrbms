@@ -267,7 +267,7 @@ class DuneDiscretization(DuneDiscretizationBase, StationaryDiscretization):
         neighborhood_assembler.assemble()
         # solve
         local_space_id = self.solution_space.subspaces[subdomain].id
-        lhs = LincombOperator([DuneXTMatrixOperator(o.matrix(), source_id=local_space_id, range_id=local_space_id)
+        lhs = LincombOperator([DuneXTMatrixOperator(o.matrix(), source_id=local_space_id, range_id=local_space_id, solver_options=solver_options)
                                for o in ops],
                               ops_coeffs)
         rhs = LincombOperator([VectorFunctional(lhs.range.make_array([v.vector()])) for v in funcs], funcs_coeffs)
@@ -429,9 +429,8 @@ def discretize(grid_and_problem_data):
                     block_space.mapper.copy_local_to_global(coupling_matrices_out_in[(ii, jj)],
                                                             coupling_patterns_out_in[(ii, jj)],
                                                             jj, ii, system_matrix)
-
-        op = DuneXTMatrixOperator(system_matrix)
         logger.debug('discretize lhs global op ...')
+        op = DuneXTMatrixOperator(system_matrix, dof_communicator=block_space.dof_communicator, solver_options=solver_options)
         logger.debug('discretize lhs global op done ...')
         mats = np.full((grid.num_subdomains, grid.num_subdomains), None)
         for ii in range(grid.num_subdomains):
@@ -675,6 +674,7 @@ def discretize(grid_and_problem_data):
             subdomain_walker = make_subdomain_walker(grid, ii)
             subdomain_walker.append(diffusive_flux_aa_product)
             subdomain_walker.walk()
+            # , block_space.local_space(ii).dof_communicator,
             matrix = DuneXTMatrixOperator(diffusive_flux_aa_product.matrix(),
                                           range_id='domain_{}'.format(ii),
                                           source_id='domain_{}'.format(ii))
@@ -693,6 +693,7 @@ def discretize(grid_and_problem_data):
             subdomain_walker = make_subdomain_walker(grid, ii)
             subdomain_walker.append(diffusive_flux_bb_product)
             subdomain_walker.walk()
+            # subdomain_rt_spaces[ii].dof_communicator,
             matrix = DuneXTMatrixOperator(diffusive_flux_bb_product.matrix(),
                                           range_id='LOCALRT_{}'.format(ii),
                                           source_id='LOCALRT_{}'.format(ii))
@@ -712,6 +713,7 @@ def discretize(grid_and_problem_data):
             subdomain_walker = make_subdomain_walker(grid, ii)
             subdomain_walker.append(diffusive_flux_ab_product)
             subdomain_walker.walk()
+            # subdomain_rt_spaces[ii].dof_communicator,
             matrix = DuneXTMatrixOperator(diffusive_flux_ab_product.matrix(),
                                           range_id='domain_{}'.format(ii),
                                           source_id='LOCALRT_{}'.format(ii))
