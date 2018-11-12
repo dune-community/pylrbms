@@ -34,7 +34,9 @@ def init_grid_and_problem(config, mu_bar = 1, mu_hat = 1, mpi_comm = MPI.COMM_WO
     diffusion_functions = [make_expression_function_1x1(
         grid, 'x', '1+(cos(0.5*pi*x[0])*cos(0.5*pi*x[1]))', order=2, name='lambda_0'),
         make_expression_function_1x1(grid, 'x', '-1*(cos(0.5*pi*x[0])*cos(0.5*pi*x[1]))', order=2, name='lambda_1')]
-
+    diffusion_functions = [make_expression_function_1x1(
+        grid, 'x', '1', order=2, name='lambda_0'),
+        make_expression_function_1x1(grid, 'x', 'x[0]', order=2, name='lambda_1')]
     parameter_type = {'diffusion': (1,)}
     coefficients = [ExpressionParameterFunctional('1.', parameter_type),
                     ExpressionParameterFunctional('diffusion', parameter_type)]

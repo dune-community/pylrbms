@@ -267,7 +267,7 @@ class DuneDiscretization(DuneDiscretizationBase, StationaryDiscretization):
         neighborhood_assembler.assemble()
         # solve
         local_space_id = self.solution_space.subspaces[subdomain].id
-        lhs = LincombOperator([DuneXTMatrixOperator(o.matrix(), source_id=local_space_id, range_id=local_space_id, solver_options=solver_options)
+        lhs = LincombOperator([DuneXTMatrixOperator(o.matrix(), source_id=local_space_id, range_id=local_space_id)
                                for o in ops],
                               ops_coeffs)
         rhs = LincombOperator([VectorFunctional(lhs.range.make_array([v.vector()])) for v in funcs], funcs_coeffs)
@@ -289,7 +289,7 @@ class DuneDiscretization(DuneDiscretizationBase, StationaryDiscretization):
         return self.solution_space.subspaces[subdomain].make_array([subdomain_correction])
 
 
-def discretize(grid_and_problem_data):
+def discretize(grid_and_problem_data, solver_options):
     ################ Setup
 
     logger = getLogger('discretize_elliptic_block_swipdg.discretize')
@@ -478,9 +478,9 @@ def discretize(grid_and_problem_data):
 
     logger.debug('block op ... ')
     ops, block_ops = zip(*(discretize_lhs(lf) for lf in lambda_funcs))
-    global_operator = LincombOperator(ops, lambda_coeffs)
-    block_op = LincombOperator(block_ops, lambda_coeffs, name='lhs')
+    global_operator = LincombOperator(ops, lambda_coeffs, solver_options=solver_options)
     logger.debug('block op global done ')
+    block_op = LincombOperator(block_ops, lambda_coeffs, name='lhs', solver_options=solver_options)
     logger.debug('block op done ')
 
     def discretize_rhs(f_func):

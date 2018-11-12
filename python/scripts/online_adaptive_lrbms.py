@@ -33,8 +33,8 @@ from dune.pylrbms.lrbms import LRBMSReductor
 # [6, 6], 4, [6, 6], 4: 0.585792065793
 # ===========================================================
 
-config = {'num_subdomains': [2, 2],
-          'half_num_fine_elements_per_subdomain_and_dim': 2,
+config = {'num_subdomains': [1, 1],
+          'half_num_fine_elements_per_subdomain_and_dim': 4,
           'initial_RB_order': 0,
           'enrichment_target_error': 1.,
           'marking_doerfler_theta': 0.8,
@@ -46,7 +46,10 @@ grid_and_problem_data = init_grid_and_problem(config)
 grid = grid_and_problem_data['grid']
 grid.visualize('grid', False)
 
-d, data = discretize(grid_and_problem_data)
+solver_options = {'max_iter': '400', 'precision': '1e-10', 'post_check_solves_system': '1e-5', 'type': 'bicgstab.ilut',
+ 'verbose': '4', 'preconditioner.iterations': '2', 'preconditioner.relaxation_factor': '1.0', }
+
+LRBMS_d, data = discretize(grid_and_problem_data, solver_options={'inverse' :solver_options})
 block_space = data['block_space']
 # d.disable_logging()
 
@@ -68,10 +71,9 @@ block_space = data['block_space']
 #  (i)  use the offline/online decomposable estimator (large offline computational effort, instant online estimation); or we
 #  (ii) use the high-dimensional estimator (no offline effort, medium online effort).
 
-LRBMS_d = d
 reductor = LRBMSReductor(
-    d,
-    products=[d.operators['local_energy_dg_product_{}'.format(ii)] for ii in range(block_space.num_blocks)],
+    LRBMS_d,
+    products=[LRBMS_d.operators['local_energy_dg_product_{}'.format(ii)] for ii in range(block_space.num_blocks)],
     order=config['initial_RB_order']
 )
 
