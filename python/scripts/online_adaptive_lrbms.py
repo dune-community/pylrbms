@@ -8,10 +8,12 @@ from pymor.core.exceptions import ExtensionError
 from pymor.core.logger import getLogger, set_log_levels
 set_log_levels({'online_adaptive_lrbms': 'DEBUG',
                 'OS2015_academic_problem': 'INFO',
-                'discretize_elliptic_block_swipdg': 'INFO',
+                'discretize_elliptic_block_swipdg': 'DEBUG',
                 'offline': 'INFO',
-                'online_enrichment': 'INFO',
-                'lrbms': 'INFO'})
+                'pymor.operators.constructions': 'DEBUG',
+'pymor.bindings6.dunext': 'DEBUG',
+                'online_enrichment': 'DEBUG',
+                'lrbms': 'DEBUG'})
 logger = getLogger('online_adaptive_lrbms.online_adaptive_lrbms')
 from pymor.discretizations.basic import StationaryDiscretization
 
@@ -46,7 +48,7 @@ grid.visualize('grid', False)
 
 d, data = discretize(grid_and_problem_data)
 block_space = data['block_space']
-d.disable_logging()
+# d.disable_logging()
 
 # logger.info('estimating some errors:')
 # errors = []
