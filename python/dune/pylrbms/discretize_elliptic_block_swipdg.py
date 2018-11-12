@@ -289,6 +289,215 @@ class DuneDiscretization(DuneDiscretizationBase, StationaryDiscretization):
         return self.solution_space.subspaces[subdomain].make_array([subdomain_correction])
 
 
+def assemble_estimator_diffusive_flux_aa(lambda_xi, lambda_xi_prime, grid, ii, block_space, lambda_hat, kappa, solution_space):
+    diffusive_flux_aa_product = make_diffusive_flux_aa_product(
+        grid, ii,
+        block_space.local_space(ii),
+        lambda_hat,
+        lambda_u=lambda_xi, lambda_v=lambda_xi_prime,
+        kappa=kappa,
+        over_integrate=2
+    )
+    subdomain_walker = make_subdomain_walker(grid, ii)
+    subdomain_walker.append(diffusive_flux_aa_product)
+    subdomain_walker.walk()
+    # , block_space.local_space(ii).dof_communicator,
+    matrix = DuneXTMatrixOperator(diffusive_flux_aa_product.matrix(),
+                                  range_id='domain_{}'.format(ii),
+                                  source_id='domain_{}'.format(ii))
+    df_ops = np.full((grid.num_subdomains,) * 2, None)
+    df_ops[ii, ii] = matrix
+    return BlockOperator(df_ops, range_spaces=solution_space.subspaces, source_spaces=solution_space.subspaces)
+
+
+def assemble_estimator_diffusive_flux_bb(grid, ii, subdomain_rt_spaces, lambda_hat, kappa, local_rt_projection):
+    diffusive_flux_bb_product = make_diffusive_flux_bb_product(
+        grid, ii,
+        subdomain_rt_spaces[ii],
+        lambda_hat,
+        kappa=kappa,
+        over_integrate=2
+    )
+    subdomain_walker = make_subdomain_walker(grid, ii)
+    subdomain_walker.append(diffusive_flux_bb_product)
+    subdomain_walker.walk()
+    # subdomain_rt_spaces[ii].dof_communicator,
+    matrix = DuneXTMatrixOperator(diffusive_flux_bb_product.matrix(),
+                                  range_id='LOCALRT_{}'.format(ii),
+                                  source_id='LOCALRT_{}'.format(ii))
+    return Concatenation([local_rt_projection.T, matrix, local_rt_projection],
+                         name='diffusive_flux_bb_{}'.format(ii))
+
+
+def assemble_estimator_diffusive_flux_ab(lambda_xi, grid, ii, block_space, subdomain_rt_spaces, lambda_hat, kappa,
+                                         local_rt_projection, local_projection):
+    diffusive_flux_ab_product = make_diffusive_flux_ab_product(
+        grid, ii,
+        range_space=block_space.local_space(ii),
+        source_space=subdomain_rt_spaces[ii],
+        lambda_range=lambda_xi,
+        lambda_hat=lambda_hat,
+        kappa=kappa,
+        over_integrate=2
+    )
+    subdomain_walker = make_subdomain_walker(grid, ii)
+    subdomain_walker.append(diffusive_flux_ab_product)
+    subdomain_walker.walk()
+    # subdomain_rt_spaces[ii].dof_communicator,
+    matrix = DuneXTMatrixOperator(diffusive_flux_ab_product.matrix(),
+                                  range_id='domain_{}'.format(ii),
+                                  source_id='LOCALRT_{}'.format(ii))
+    return Concatenation([local_projection.T, matrix, local_rt_projection])
+
+
+def discretize_lhs(lambda_func, grid, block_space, local_patterns, boundary_patterns, coupling_matrices, kappa,
+                   local_all_neumann_boundary_info, boundary_info, coupling_patterns, solver_options):
+    logger = getLogger('discretize_lhs')
+    logger.debug('...')
+    local_matrices = [None]*grid.num_subdomains
+    boundary_matrices = {}
+    logger.debug('discretize lhs coupling matrices ...')
+    for ii in range(grid.num_subdomains):
+        local_matrices[ii] = Matrix(block_space.local_space(ii).size(),
+                                    block_space.local_space(ii).size(),
+                                    local_patterns[ii])
+        if ii in grid.boundary_subdomains():
+            boundary_matrices[ii] = Matrix(block_space.local_space(ii).size(),
+                                           block_space.local_space(ii).size(),
+                                           boundary_patterns[ii])
+
+    logger.debug('discretize lhs ipdg ops ...')
+    for ii in range(grid.num_subdomains):
+        ss = block_space.local_space(ii)
+        ll = local_matrices[ii]
+        ipdg_operator = make_elliptic_swipdg_matrix_operator(lambda_func, kappa, local_all_neumann_boundary_info,
+                                                             ll,
+                                                             ss, over_integrate=2)
+        ipdg_operator.assemble(False)
+
+    logger.debug('discretize lhs ops ...')
+    local_ipdg_coupling_operator = make_local_elliptic_swipdg_coupling_operator(lambda_func, kappa)
+
+    def assemble_coupling_contributions(subdomain, neighboring_subdomain):
+        coupling_assembler = block_space.coupling_assembler(subdomain, neighboring_subdomain)
+        coupling_assembler.append(local_ipdg_coupling_operator,
+                                  coupling_matrices['in_in'][(subdomain, neighboring_subdomain)],
+                                  coupling_matrices['out_out'][(subdomain, neighboring_subdomain)],
+                                  coupling_matrices['in_out'][(subdomain, neighboring_subdomain)],
+                                  coupling_matrices['out_in'][(subdomain, neighboring_subdomain)])
+        coupling_assembler.assemble()
+
+    for ii in range(grid.num_subdomains):
+        for jj in grid.neighboring_subdomains(ii):
+            if ii < jj:  # Assemble primally (visit each coupling only once).
+                assemble_coupling_contributions(ii, jj)
+
+    logger.debug('discretize lhs boundary ...')
+    local_ipdg_boundary_operator = make_local_elliptic_swipdg_boundary_operator(lambda_func, kappa)
+    apply_on_dirichlet_intersections = make_apply_on_dirichlet_intersections(boundary_info)
+
+    def assemble_boundary_contributions(subdomain):
+        boundary_assembler = block_space.boundary_assembler(subdomain)
+        boundary_assembler.append(local_ipdg_boundary_operator,
+                                  boundary_matrices[subdomain],
+                                  apply_on_dirichlet_intersections)
+        boundary_assembler.assemble()
+
+    for ii in grid.boundary_subdomains():
+        assemble_boundary_contributions(ii)
+
+    logger.debug('discretize lhs global contributions ...')
+    global_pattern = SparsityPatternDefault(block_space.mapper.size)
+    for ii in range(grid.num_subdomains):
+        block_space.mapper.copy_local_to_global(local_patterns[ii], ii, global_pattern)
+        if ii in grid.boundary_subdomains():
+            block_space.mapper.copy_local_to_global(boundary_patterns[ii], ii, global_pattern)
+        for jj in grid.neighboring_subdomains(ii):
+            if ii < jj:  # Assemble primally (visit each coupling only once).
+                block_space.mapper.copy_local_to_global(coupling_patterns['in_in'][(ii, jj)], ii, ii, global_pattern)
+                block_space.mapper.copy_local_to_global(coupling_patterns['out_out'][(ii, jj)], jj, jj, global_pattern)
+                block_space.mapper.copy_local_to_global(coupling_patterns['in_out'][(ii, jj)], ii, jj, global_pattern)
+                block_space.mapper.copy_local_to_global(coupling_patterns['out_in'][(ii, jj)], jj, ii, global_pattern)
+
+    system_matrix = Matrix(block_space.mapper.size, block_space.mapper.size, global_pattern)
+    for ii in range(grid.num_subdomains):
+        block_space.mapper.copy_local_to_global(local_matrices[ii], local_patterns[ii], ii, system_matrix)
+        if ii in grid.boundary_subdomains():
+            block_space.mapper.copy_local_to_global(boundary_matrices[ii], boundary_patterns[ii],
+                                                    ii, ii, system_matrix)
+        for jj in grid.neighboring_subdomains(ii):
+            if ii < jj:  # Assemble primally (visit each coupling only once).
+                block_space.mapper.copy_local_to_global(coupling_matrices['in_in'][(ii, jj)],
+                                                        coupling_patterns['in_in'][(ii, jj)],
+                                                        ii, ii, system_matrix)
+                block_space.mapper.copy_local_to_global(coupling_matrices['out_out'][(ii, jj)],
+                                                        coupling_patterns['out_out'][(ii, jj)],
+                                                        jj, jj, system_matrix)
+                block_space.mapper.copy_local_to_global(coupling_matrices['in_out'][(ii, jj)],
+                                                        coupling_patterns['in_out'][(ii, jj)],
+                                                        ii, jj, system_matrix)
+                block_space.mapper.copy_local_to_global(coupling_matrices['out_in'][(ii, jj)],
+                                                        coupling_patterns['out_in'][(ii, jj)],
+                                                        jj, ii, system_matrix)
+    logger.debug('discretize lhs global op ...')
+    op = DuneXTMatrixOperator(system_matrix, dof_communicator=block_space.dof_communicator, solver_options=solver_options)
+    logger.debug('discretize lhs global op done ...')
+    mats = np.full((grid.num_subdomains, grid.num_subdomains), None)
+    for ii in range(grid.num_subdomains):
+        for jj in range(ii, grid.num_subdomains):
+            if ii == jj:
+                mats[ii, ii] = Matrix(block_space.local_space(ii).size(),
+                                      block_space.local_space(ii).size(),
+                                      local_patterns[ii])
+            elif (ii, jj) in coupling_matrices['in_out']:
+                mats[ii, jj] = Matrix(block_space.local_space(ii).size(),
+                                      block_space.local_space(jj).size(),
+                                      coupling_patterns['in_out'][(ii, jj)])
+                mats[jj, ii] = Matrix(block_space.local_space(jj).size(),
+                                      block_space.local_space(ii).size(),
+                                      coupling_patterns['out_in'][(ii, jj)])
+
+    for ii in range(grid.num_subdomains):
+        for jj in range(ii, grid.num_subdomains):
+            if ii == jj:
+                mats[ii, ii].axpy(1.,  local_matrices[ii])
+                if ii in boundary_matrices:
+                    mats[ii, ii].axpy(1.,  boundary_matrices[ii])
+            elif (ii, jj) in coupling_matrices['in_out']:
+                mats[ii, ii].axpy(1., coupling_matrices['in_in'][(ii, jj)])
+                mats[jj, jj].axpy(1., coupling_matrices['out_out'][(ii, jj)])
+                mats[ii, jj].axpy(1., coupling_matrices['in_out'][(ii, jj)])
+                mats[jj, ii].axpy(1., coupling_matrices['out_in'][(ii, jj)])
+
+    logger.debug('discretize lhs block op ...')
+    ops = np.full((grid.num_subdomains, grid.num_subdomains), None)
+    for (ii, jj), mat in np.ndenumerate(mats):
+        ops[ii, jj] = DuneXTMatrixOperator(mat,
+                                           source_id='domain_{}'.format(jj),
+                                           range_id='domain_{}'.format(ii)) if mat else None
+    block_op = BlockOperator(ops)
+    return op, block_op
+
+
+def discretize_rhs(f_func, grid, block_space, global_operator, block_ops, block_op):
+    logger = getLogger('discretizing_rhs')
+    logger.debug('...')
+    local_vectors = [None]*grid.num_subdomains
+    rhs_vector = Vector(block_space.mapper.size, 0.)
+    for ii in range(grid.num_subdomains):
+        local_vectors[ii] = Vector(block_space.local_space(ii).size())
+        l2_functional = make_l2_volume_vector_functional(f_func, local_vectors[ii],
+                                                         block_space.local_space(ii), over_integrate=2)
+        l2_functional.assemble()
+        block_space.mapper.copy_local_to_global(local_vectors[ii], ii, rhs_vector)
+    rhs = VectorFunctional(global_operator.range.make_array([rhs_vector]))
+    rhss = []
+    for ii in range(grid.num_subdomains):
+        rhss.append(block_ops[0]._blocks[ii, ii].range.make_array([local_vectors[ii]]))
+    block_rhs = VectorFunctional(block_op.range.make_array(rhss))
+    return rhs, block_rhs
+
+
 def discretize(grid_and_problem_data, solver_options):
     ################ Setup
 
@@ -308,165 +517,32 @@ def discretize(grid_and_problem_data, solver_options):
 
     local_patterns = [block_space.local_space(ii).compute_pattern('face_and_volume')
                       for ii in range(block_space.num_blocks)]
-    coupling_patterns_in_in = {}
-    coupling_patterns_out_out = {}
-    coupling_patterns_in_out = {}
-    coupling_patterns_out_in = {}
+    coupling_patterns = {'in_in' : {}, 'out_out' : {}, 'in_out' : {}, 'out_in' : {}}
+    coupling_matrices = {'in_in': {}, 'out_out': {}, 'in_out': {}, 'out_in': {}}
     for ii in range(grid.num_subdomains):
         for jj in grid.neighboring_subdomains(ii):
             if ii < jj:  # Assemble primally (visit each coupling only once).
-                coupling_patterns_in_in[(ii, jj)] = block_space.local_space(ii).compute_pattern('face_and_volume')
-                coupling_patterns_out_out[(ii, jj)] = block_space.local_space(jj).compute_pattern('face_and_volume')
-                coupling_patterns_in_out[(ii, jj)] = block_space.compute_coupling_pattern(ii, jj, 'face')
-                coupling_patterns_out_in[(ii, jj)] = block_space.compute_coupling_pattern(jj, ii, 'face')
+                coupling_patterns['in_in'][(ii, jj)] = block_space.local_space(ii).compute_pattern('face_and_volume')
+                coupling_patterns['out_out'][(ii, jj)] = block_space.local_space(jj).compute_pattern('face_and_volume')
+                coupling_patterns['in_out'][(ii, jj)] = block_space.compute_coupling_pattern(ii, jj, 'face')
+                coupling_patterns['out_in'][(ii, jj)] = block_space.compute_coupling_pattern(jj, ii, 'face')
+                coupling_matrices['in_in'][(ii, jj)] = Matrix(block_space.local_space(ii).size(),
+                                                           block_space.local_space(ii).size(),
+                                                           coupling_patterns['in_in'][(ii, jj)])
+                coupling_matrices['out_out'][(ii, jj)] = Matrix(block_space.local_space(jj).size(),
+                                                             block_space.local_space(jj).size(),
+                                                             coupling_patterns['out_out'][(ii, jj)])
+                coupling_matrices['in_out'][(ii, jj)] = Matrix(block_space.local_space(ii).size(),
+                                                            block_space.local_space(jj).size(),
+                                                            coupling_patterns['in_out'][(ii, jj)])
+                coupling_matrices['out_in'][(ii, jj)] = Matrix(block_space.local_space(jj).size(),
+                                                            block_space.local_space(ii).size(),
+                                                            coupling_patterns['out_in'][(ii, jj)])
     boundary_patterns = {}
     for ii in grid.boundary_subdomains():
         boundary_patterns[ii] = block_space.local_space(ii).compute_pattern('face_and_volume')
 
     ################ Assemble LHS and RHS
-
-    def discretize_lhs(lambda_func):
-        logger.debug('discretize lhs ...')
-        local_matrices = [None]*grid.num_subdomains
-        boundary_matrices = {}
-        coupling_matrices_in_in = {}
-        coupling_matrices_out_out = {}
-        coupling_matrices_in_out = {}
-        coupling_matrices_out_in = {}
-        logger.debug('discretize lhs coupling matrices ...')
-        for ii in range(grid.num_subdomains):
-            local_matrices[ii] = Matrix(block_space.local_space(ii).size(),
-                                        block_space.local_space(ii).size(),
-                                        local_patterns[ii])
-            if ii in grid.boundary_subdomains():
-                boundary_matrices[ii] = Matrix(block_space.local_space(ii).size(),
-                                               block_space.local_space(ii).size(),
-                                               boundary_patterns[ii])
-            for jj in grid.neighboring_subdomains(ii):
-                if ii < jj:  # Assemble primally (visit each coupling only once).
-                    coupling_matrices_in_in[(ii, jj)] = Matrix(block_space.local_space(ii).size(),
-                                                               block_space.local_space(ii).size(),
-                                                               coupling_patterns_in_in[(ii, jj)])
-                    coupling_matrices_out_out[(ii, jj)] = Matrix(block_space.local_space(jj).size(),
-                                                                 block_space.local_space(jj).size(),
-                                                                 coupling_patterns_out_out[(ii, jj)])
-                    coupling_matrices_in_out[(ii, jj)] = Matrix(block_space.local_space(ii).size(),
-                                                                block_space.local_space(jj).size(),
-                                                                coupling_patterns_in_out[(ii, jj)])
-                    coupling_matrices_out_in[(ii, jj)] = Matrix(block_space.local_space(jj).size(),
-                                                                block_space.local_space(ii).size(),
-                                                                coupling_patterns_out_in[(ii, jj)])
-        logger.debug('discretize lhs ipdg ops ...')
-        for ii in range(grid.num_subdomains):
-            ss = block_space.local_space(ii)
-            ll = local_matrices[ii]
-            ipdg_operator = make_elliptic_swipdg_matrix_operator(lambda_func, kappa, local_all_neumann_boundary_info,
-                                                                 ll,
-                                                                 ss, over_integrate=2)
-            ipdg_operator.assemble(False)
-
-        logger.debug('discretize lhs ops ...')
-        local_ipdg_coupling_operator = make_local_elliptic_swipdg_coupling_operator(lambda_func, kappa)
-
-        def assemble_coupling_contributions(subdomain, neighboring_subdomain):
-            coupling_assembler = block_space.coupling_assembler(subdomain, neighboring_subdomain)
-            coupling_assembler.append(local_ipdg_coupling_operator,
-                                      coupling_matrices_in_in[(subdomain, neighboring_subdomain)],
-                                      coupling_matrices_out_out[(subdomain, neighboring_subdomain)],
-                                      coupling_matrices_in_out[(subdomain, neighboring_subdomain)],
-                                      coupling_matrices_out_in[(subdomain, neighboring_subdomain)])
-            coupling_assembler.assemble()
-
-        for ii in range(grid.num_subdomains):
-            for jj in grid.neighboring_subdomains(ii):
-                if ii < jj:  # Assemble primally (visit each coupling only once).
-                    assemble_coupling_contributions(ii, jj)
-
-        logger.debug('discretize lhs boundary ...')
-        local_ipdg_boundary_operator = make_local_elliptic_swipdg_boundary_operator(lambda_func, kappa)
-        apply_on_dirichlet_intersections = make_apply_on_dirichlet_intersections(boundary_info)
-
-        def assemble_boundary_contributions(subdomain):
-            boundary_assembler = block_space.boundary_assembler(subdomain)
-            boundary_assembler.append(local_ipdg_boundary_operator,
-                                      boundary_matrices[subdomain],
-                                      apply_on_dirichlet_intersections)
-            boundary_assembler.assemble()
-
-        for ii in grid.boundary_subdomains():
-            assemble_boundary_contributions(ii)
-
-        logger.debug('discretize lhs global contributions ...')
-        global_pattern = SparsityPatternDefault(block_space.mapper.size)
-        for ii in range(grid.num_subdomains):
-            block_space.mapper.copy_local_to_global(local_patterns[ii], ii, global_pattern)
-            if ii in grid.boundary_subdomains():
-                block_space.mapper.copy_local_to_global(boundary_patterns[ii], ii, global_pattern)
-            for jj in grid.neighboring_subdomains(ii):
-                if ii < jj:  # Assemble primally (visit each coupling only once).
-                    block_space.mapper.copy_local_to_global(coupling_patterns_in_in[(ii, jj)], ii, ii, global_pattern)
-                    block_space.mapper.copy_local_to_global(coupling_patterns_out_out[(ii, jj)], jj, jj, global_pattern)
-                    block_space.mapper.copy_local_to_global(coupling_patterns_in_out[(ii, jj)], ii, jj, global_pattern)
-                    block_space.mapper.copy_local_to_global(coupling_patterns_out_in[(ii, jj)], jj, ii, global_pattern)
-
-        system_matrix = Matrix(block_space.mapper.size, block_space.mapper.size, global_pattern)
-        for ii in range(grid.num_subdomains):
-            block_space.mapper.copy_local_to_global(local_matrices[ii], local_patterns[ii], ii, system_matrix)
-            if ii in grid.boundary_subdomains():
-                block_space.mapper.copy_local_to_global(boundary_matrices[ii], boundary_patterns[ii],
-                                                        ii, ii, system_matrix)
-            for jj in grid.neighboring_subdomains(ii):
-                if ii < jj:  # Assemble primally (visit each coupling only once).
-                    block_space.mapper.copy_local_to_global(coupling_matrices_in_in[(ii, jj)],
-                                                            coupling_patterns_in_in[(ii, jj)],
-                                                            ii, ii, system_matrix)
-                    block_space.mapper.copy_local_to_global(coupling_matrices_out_out[(ii, jj)],
-                                                            coupling_patterns_out_out[(ii, jj)],
-                                                            jj, jj, system_matrix)
-                    block_space.mapper.copy_local_to_global(coupling_matrices_in_out[(ii, jj)],
-                                                            coupling_patterns_in_out[(ii, jj)],
-                                                            ii, jj, system_matrix)
-                    block_space.mapper.copy_local_to_global(coupling_matrices_out_in[(ii, jj)],
-                                                            coupling_patterns_out_in[(ii, jj)],
-                                                            jj, ii, system_matrix)
-        logger.debug('discretize lhs global op ...')
-        op = DuneXTMatrixOperator(system_matrix, dof_communicator=block_space.dof_communicator, solver_options=solver_options)
-        logger.debug('discretize lhs global op done ...')
-        mats = np.full((grid.num_subdomains, grid.num_subdomains), None)
-        for ii in range(grid.num_subdomains):
-            for jj in range(ii, grid.num_subdomains):
-                if ii == jj:
-                    mats[ii, ii] = Matrix(block_space.local_space(ii).size(),
-                                          block_space.local_space(ii).size(),
-                                          local_patterns[ii])
-                elif (ii, jj) in coupling_matrices_in_out:
-                    mats[ii, jj] = Matrix(block_space.local_space(ii).size(),
-                                          block_space.local_space(jj).size(),
-                                          coupling_patterns_in_out[(ii, jj)])
-                    mats[jj, ii] = Matrix(block_space.local_space(jj).size(),
-                                          block_space.local_space(ii).size(),
-                                          coupling_patterns_out_in[(ii, jj)])
-
-        for ii in range(grid.num_subdomains):
-            for jj in range(ii, grid.num_subdomains):
-                if ii == jj:
-                    mats[ii, ii].axpy(1.,  local_matrices[ii])
-                    if ii in boundary_matrices:
-                        mats[ii, ii].axpy(1.,  boundary_matrices[ii])
-                elif (ii, jj) in coupling_matrices_in_out:
-                    mats[ii, ii].axpy(1., coupling_matrices_in_in[(ii, jj)])
-                    mats[jj, jj].axpy(1., coupling_matrices_out_out[(ii, jj)])
-                    mats[ii, jj].axpy(1., coupling_matrices_in_out[(ii, jj)])
-                    mats[jj, ii].axpy(1., coupling_matrices_out_in[(ii, jj)])
-
-        logger.debug('discretize lhs block op ...')
-        ops = np.full((grid.num_subdomains, grid.num_subdomains), None)
-        for (ii, jj), mat in np.ndenumerate(mats):
-            ops[ii, jj] = DuneXTMatrixOperator(mat,
-                                               source_id='domain_{}'.format(jj),
-                                               range_id='domain_{}'.format(ii)) if mat else None
-        block_op = BlockOperator(ops)
-        return op, block_op
 
     lambda_, kappa = grid_and_problem_data['lambda'], grid_and_problem_data['kappa']
     if isinstance(lambda_, dict):
@@ -477,28 +553,13 @@ def discretize(grid_and_problem_data, solver_options):
         lambda_coeffs = [1,]
 
     logger.debug('block op ... ')
-    ops, block_ops = zip(*(discretize_lhs(lf) for lf in lambda_funcs))
+    ops, block_ops = zip(*(discretize_lhs(lf, grid, block_space, local_patterns, boundary_patterns,
+                                          coupling_matrices, kappa, local_all_neumann_boundary_info, boundary_info,
+                                          coupling_patterns, solver_options) for lf in lambda_funcs))
     global_operator = LincombOperator(ops, lambda_coeffs, solver_options=solver_options)
     logger.debug('block op global done ')
     block_op = LincombOperator(block_ops, lambda_coeffs, name='lhs', solver_options=solver_options)
     logger.debug('block op done ')
-
-    def discretize_rhs(f_func):
-        logger.debug('discretizing rhs... ')
-        local_vectors = [None]*grid.num_subdomains
-        rhs_vector = Vector(block_space.mapper.size, 0.)
-        for ii in range(grid.num_subdomains):
-            local_vectors[ii] = Vector(block_space.local_space(ii).size())
-            l2_functional = make_l2_volume_vector_functional(f_func, local_vectors[ii],
-                                                             block_space.local_space(ii), over_integrate=2)
-            l2_functional.assemble()
-            block_space.mapper.copy_local_to_global(local_vectors[ii], ii, rhs_vector)
-        rhs = VectorFunctional(global_operator.range.make_array([rhs_vector]))
-        rhss = []
-        for ii in range(grid.num_subdomains):
-            rhss.append(block_ops[0]._blocks[ii, ii].range.make_array([local_vectors[ii]]))
-        block_rhs = VectorFunctional(block_op.range.make_array(rhss))
-        return rhs, block_rhs
 
     f = grid_and_problem_data['f']
     if isinstance(f, dict):
@@ -507,7 +568,7 @@ def discretize(grid_and_problem_data, solver_options):
     else:
         f_funcs = [f,]
         f_coeffs = [1,]
-    rhss, block_rhss = zip(*(discretize_rhs(ff) for ff in f_funcs))
+    rhss, block_rhss = zip(*(discretize_rhs(ff, grid, block_space, global_operator, block_ops, block_op) for ff in f_funcs))
     global_rhs = LincombOperator(rhss, f_coeffs)
     block_rhs = LincombOperator(block_rhss, f_coeffs)
 
@@ -662,65 +723,9 @@ def discretize(grid_and_problem_data, solver_options):
 
         ################ Assemble error estimator operators -- Diffusive flux
 
-        def assemble_estimator_diffusive_flux_aa(lambda_xi, lambda_xi_prime):
-            diffusive_flux_aa_product = make_diffusive_flux_aa_product(
-                grid, ii,
-                block_space.local_space(ii),
-                lambda_hat,
-                lambda_u=lambda_xi, lambda_v=lambda_xi_prime,
-                kappa=kappa,
-                over_integrate=2
-            )
-            subdomain_walker = make_subdomain_walker(grid, ii)
-            subdomain_walker.append(diffusive_flux_aa_product)
-            subdomain_walker.walk()
-            # , block_space.local_space(ii).dof_communicator,
-            matrix = DuneXTMatrixOperator(diffusive_flux_aa_product.matrix(),
-                                          range_id='domain_{}'.format(ii),
-                                          source_id='domain_{}'.format(ii))
-            df_ops = np.full((grid.num_subdomains,) * 2, None)
-            df_ops[ii, ii] = matrix
-            return BlockOperator(df_ops, range_spaces=solution_space.subspaces, source_spaces=solution_space.subspaces)
-
-        def assemble_estimator_diffusive_flux_bb():
-            diffusive_flux_bb_product = make_diffusive_flux_bb_product(
-                grid, ii,
-                subdomain_rt_spaces[ii],
-                lambda_hat,
-                kappa=kappa,
-                over_integrate=2
-            )
-            subdomain_walker = make_subdomain_walker(grid, ii)
-            subdomain_walker.append(diffusive_flux_bb_product)
-            subdomain_walker.walk()
-            # subdomain_rt_spaces[ii].dof_communicator,
-            matrix = DuneXTMatrixOperator(diffusive_flux_bb_product.matrix(),
-                                          range_id='LOCALRT_{}'.format(ii),
-                                          source_id='LOCALRT_{}'.format(ii))
-            return Concatenation([local_rt_projection.T, matrix, local_rt_projection],
-                                 name='diffusive_flux_bb_{}'.format(ii))
-
-        def assemble_estimator_diffusive_flux_ab(lambda_xi):
-            diffusive_flux_ab_product = make_diffusive_flux_ab_product(
-                grid, ii,
-                range_space=block_space.local_space(ii),
-                source_space=subdomain_rt_spaces[ii],
-                lambda_range=lambda_xi,
-                lambda_hat=lambda_hat,
-                kappa=kappa,
-                over_integrate=2
-            )
-            subdomain_walker = make_subdomain_walker(grid, ii)
-            subdomain_walker.append(diffusive_flux_ab_product)
-            subdomain_walker.walk()
-            # subdomain_rt_spaces[ii].dof_communicator,
-            matrix = DuneXTMatrixOperator(diffusive_flux_ab_product.matrix(),
-                                          range_id='domain_{}'.format(ii),
-                                          source_id='LOCALRT_{}'.format(ii))
-            return Concatenation([local_projection.T, matrix, local_rt_projection])
-
         operators['df_aa_{}'.format(ii)] = LincombOperator(
-            [assemble_estimator_diffusive_flux_aa(lambda_xi, lambda_xi_prime)
+            [assemble_estimator_diffusive_flux_aa(lambda_xi, lambda_xi_prime, grid, ii, block_space, lambda_hat, kappa,
+                                                  solution_space)
              for lambda_xi in lambda_funcs
              for lambda_xi_prime in lambda_funcs],
             [ProductParameterFunctional([c1, c2])
@@ -728,10 +733,12 @@ def discretize(grid_and_problem_data, solver_options):
              for c2 in lambda_coeffs],
             name='diffusive_flux_aa_{}'.format(ii))
 
-        operators['df_bb_{}'.format(ii)] = assemble_estimator_diffusive_flux_bb()
+        operators['df_bb_{}'.format(ii)] = assemble_estimator_diffusive_flux_bb(grid, ii, subdomain_rt_spaces,
+                                                                                lambda_hat, kappa, local_rt_projection)
 
         operators['df_ab_{}'.format(ii)] = LincombOperator(
-            [assemble_estimator_diffusive_flux_ab(lambda_xi) for lambda_xi in lambda_funcs],
+            [assemble_estimator_diffusive_flux_ab(lambda_xi, grid, ii, block_space, subdomain_rt_spaces, lambda_hat,
+                                                  kappa, local_rt_projection, local_projection) for lambda_xi in lambda_funcs],
             lambda_coeffs,
             name='diffusive_flux_ab_{}'.format(ii)
         )
