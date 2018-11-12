@@ -326,12 +326,14 @@ def discretize(grid_and_problem_data):
     ################ Assemble LHS and RHS
 
     def discretize_lhs(lambda_func):
+        logger.debug('discretize lhs ...')
         local_matrices = [None]*grid.num_subdomains
         boundary_matrices = {}
         coupling_matrices_in_in = {}
         coupling_matrices_out_out = {}
         coupling_matrices_in_out = {}
         coupling_matrices_out_in = {}
+        logger.debug('discretize lhs coupling matrices ...')
         for ii in range(grid.num_subdomains):
             local_matrices[ii] = Matrix(block_space.local_space(ii).size(),
                                         block_space.local_space(ii).size(),
@@ -354,7 +356,7 @@ def discretize(grid_and_problem_data):
                     coupling_matrices_out_in[(ii, jj)] = Matrix(block_space.local_space(jj).size(),
                                                                 block_space.local_space(ii).size(),
                                                                 coupling_patterns_out_in[(ii, jj)])
-
+        logger.debug('discretize lhs ipdg ops ...')
         for ii in range(grid.num_subdomains):
             ss = block_space.local_space(ii)
             ll = local_matrices[ii]
@@ -363,6 +365,7 @@ def discretize(grid_and_problem_data):
                                                                  ss, over_integrate=2)
             ipdg_operator.assemble(False)
 
+        logger.debug('discretize lhs ops ...')
         local_ipdg_coupling_operator = make_local_elliptic_swipdg_coupling_operator(lambda_func, kappa)
 
         def assemble_coupling_contributions(subdomain, neighboring_subdomain):
@@ -379,6 +382,7 @@ def discretize(grid_and_problem_data):
                 if ii < jj:  # Assemble primally (visit each coupling only once).
                     assemble_coupling_contributions(ii, jj)
 
+        logger.debug('discretize lhs boundary ...')
         local_ipdg_boundary_operator = make_local_elliptic_swipdg_boundary_operator(lambda_func, kappa)
         apply_on_dirichlet_intersections = make_apply_on_dirichlet_intersections(boundary_info)
 
@@ -392,6 +396,7 @@ def discretize(grid_and_problem_data):
         for ii in grid.boundary_subdomains():
             assemble_boundary_contributions(ii)
 
+        logger.debug('discretize lhs global contributions ...')
         global_pattern = SparsityPatternDefault(block_space.mapper.size)
         for ii in range(grid.num_subdomains):
             block_space.mapper.copy_local_to_global(local_patterns[ii], ii, global_pattern)
@@ -426,6 +431,8 @@ def discretize(grid_and_problem_data):
                                                             jj, ii, system_matrix)
 
         op = DuneXTMatrixOperator(system_matrix)
+        logger.debug('discretize lhs global op ...')
+        logger.debug('discretize lhs global op done ...')
         mats = np.full((grid.num_subdomains, grid.num_subdomains), None)
         for ii in range(grid.num_subdomains):
             for jj in range(ii, grid.num_subdomains):
@@ -453,6 +460,7 @@ def discretize(grid_and_problem_data):
                     mats[ii, jj].axpy(1., coupling_matrices_in_out[(ii, jj)])
                     mats[jj, ii].axpy(1., coupling_matrices_out_in[(ii, jj)])
 
+        logger.debug('discretize lhs block op ...')
         ops = np.full((grid.num_subdomains, grid.num_subdomains), None)
         for (ii, jj), mat in np.ndenumerate(mats):
             ops[ii, jj] = DuneXTMatrixOperator(mat,
@@ -469,11 +477,15 @@ def discretize(grid_and_problem_data):
         lambda_funcs = [lambda_,]
         lambda_coeffs = [1,]
 
+    logger.debug('block op ... ')
     ops, block_ops = zip(*(discretize_lhs(lf) for lf in lambda_funcs))
     global_operator = LincombOperator(ops, lambda_coeffs)
     block_op = LincombOperator(block_ops, lambda_coeffs, name='lhs')
+    logger.debug('block op global done ')
+    logger.debug('block op done ')
 
     def discretize_rhs(f_func):
+        logger.debug('discretizing rhs... ')
         local_vectors = [None]*grid.num_subdomains
         rhs_vector = Vector(block_space.mapper.size, 0.)
         for ii in range(grid.num_subdomains):
