@@ -207,6 +207,7 @@ class DuneDiscretization(DuneDiscretizationBase, StationaryDiscretization):
         self.global_operator, self.global_rhs, self.neighborhoods, self.enrichment_data = \
             global_operator, global_rhs, neighborhoods, enrichment_data
         self.data = data
+        self.block_operator=operator
 
     def _solve(self, mu):
         if not self.logging_disabled:
@@ -475,7 +476,7 @@ def discretize_lhs(lambda_func, grid, block_space, local_patterns, boundary_patt
         ops[ii, jj] = DuneXTMatrixOperator(mat,
                                            source_id='domain_{}'.format(jj),
                                            range_id='domain_{}'.format(ii)) if mat else None
-    block_op = BlockOperator(ops)
+    block_op = BlockOperator(ops, dof_communicator=block_space.dof_communicator)
     return op, block_op
 
 
@@ -498,7 +499,7 @@ def discretize_rhs(f_func, grid, block_space, global_operator, block_ops, block_
     return rhs, block_rhs
 
 
-def discretize(grid_and_problem_data, solver_options):
+def discretize(grid_and_problem_data, solver_options, mpi_comm):
     ################ Setup
 
     logger = getLogger('discretize_elliptic_block_swipdg.discretize')
@@ -756,20 +757,21 @@ def discretize(grid_and_problem_data, solver_options):
                                          range(grid.num_subdomains)])
     else:
         local_eta_rf_squared = None
-    estimator = EllipticEstimator(min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs,
-                                  mu_bar, mu_hat, fr_op, oi_op)
+    estimator = EllipticEstimator(grid, min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs,
+                                  mu_bar, mu_hat, flux_reconstruction_op, oswald_interpolation_error=oi_op,
+                                  mpi_comm = mpi_comm)
     l2_product = BlockDiagonalOperator(local_l2_products)
 
     # instantiate discretization
     neighborhoods = [grid.neighborhood_of(ii) for ii in range(grid.num_subdomains)]
     local_boundary_info = make_subdomain_boundary_info(grid_and_problem_data['grid'],
                                                        {'type': 'xt.grid.boundaryinfo.alldirichlet'})
-    d = DuneDiscretization(global_operator,
-                           global_rhs,
-                           neighborhoods,
-                           (grid, local_boundary_info, lambda_, kappa, f, block_space),
-                           block_op,
-                           block_rhs,
+    d = DuneDiscretization(global_operator=global_operator,
+                           global_rhs=global_rhs,
+                           neighborhoods=neighborhoods,
+                           enrichment_data=(grid, local_boundary_info, lambda_, kappa, f, block_space),
+                           operator=block_op,
+                           rhs=block_rhs,
                            visualizer=DuneGDTVisualizer(block_space),
                            operators=operators,
                            products={'l2': l2_product},

@@ -73,8 +73,9 @@ class LRBMSReductor(GenericRBSystemReductor):
 
 class EstimatorBase(ImmutableInterface):
 
-    def __init__(self, min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs, mu_bar, mu_hat,
-                 flux_reconstruction, oswald_interpolation_error):
+    def __init__(self, grid, min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs, mu_bar, mu_hat,
+                 flux_reconstruction, oswald_interpolation_error, mpi_comm):
+        self.grid = grid
         self.min_diffusion_evs = min_diffusion_evs
         self.subdomain_diameters = subdomain_diameters
         self.local_eta_rf_squared = local_eta_rf_squared

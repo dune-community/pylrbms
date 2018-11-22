@@ -21,7 +21,7 @@ from pymor.parameters.functionals import ProductParameterFunctional
 from pymor.parameters.spaces import CubicParameterSpace
 
 
-def discretize(grid_and_problem_data, polorder):
+def discretize(grid_and_problem_data, polorder=1, solver_options=None):
 
     logger = getLogger('discretize_elliptic_swipdg.discretize')
     logger.info('discretizing ... ')
@@ -65,7 +65,7 @@ def discretize(grid_and_problem_data, polorder):
     system_assembler.walk()
     # wrap everything
     if isinstance(_lambda, dict):
-        op = LincombOperator([DuneXTMatrixOperator(o.matrix()) for o in system_ops],
+        op = LincombOperator([DuneXTMatrixOperator(o.matrix(), dof_communicator=space.dof_communicator) for o in system_ops],
                              _lambda['coefficients'])
         elliptic_op = LincombOperator([DuneXTMatrixOperator(o.matrix()) for o in elliptic_ops],
                                       _lambda['coefficients'])
