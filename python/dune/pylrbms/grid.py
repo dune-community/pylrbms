@@ -17,7 +17,7 @@ def make_grid(domain=([0, 0], [1, 1]),
         if grid_type == 'yasp':
             from dune.xt.grid.provider import make_cube_dd_subdomains_grid__2d_cube_yaspgrid as _make_grid
         else:
-            from dune.xt.grid.provider import make_cube_dd_subdomains_grid__2d_simplex_aluconformgrid as _make_grid
+            from dune.xt.grid.provider import make_cube_dd_subdomains_grid__2d_simplex_alunonconformgrid as _make_grid
 
         return _make_grid(
                 lower_left=domain[0],
