@@ -1,3 +1,5 @@
+import pprint
+
 import numpy as np
 
 from pymor.algorithms.system import unblock
@@ -6,6 +8,7 @@ from pymor.operators.block import BlockDiagonalOperator
 from pymor.operators.constructions import LincombOperator
 from pymor.operators.numpy import NumpyMatrixOperator
 from pymor.reductors.system import GenericRBSystemReductor
+from pymor.parallel.mpi import norm as mpi_norm
 
 
 class LRBMSReductor(GenericRBSystemReductor):
@@ -84,39 +87,42 @@ class EstimatorBase(ImmutableInterface):
         self.mu_hat = mu_hat
         self.flux_reconstruction = flux_reconstruction
         self.oswald_interpolation_error = oswald_interpolation_error
-        self.num_subdomains = len(subdomain_diameters)
+        self.num_subdomains = len(grid.subdomains_on_rank)
+        self.mpi_comm = mpi_comm
 
     def _estimate_elliptic(self, U, mu, d, elliptic_reconstruction=False, decompose=False):
         alpha_mu_mu_bar = self.alpha(self.lambda_coeffs, mu, self.mu_bar)
         gamma_mu_mu_bar = self.gamma(self.lambda_coeffs, mu, self.mu_bar)
         alpha_mu_mu_hat = self.alpha(self.lambda_coeffs, mu, self.mu_hat)
 
-        local_eta_nc = np.zeros((self.num_subdomains, len(U)))
-        local_eta_r = np.zeros((self.num_subdomains, len(U)))
-        local_eta_df = np.zeros((self.num_subdomains, len(U)))
+        vec_size = self.num_subdomains
+        local_eta_nc = np.zeros((vec_size, len(U)))
+        local_eta_r = np.zeros((vec_size, len(U)))
+        local_eta_df = np.zeros((vec_size, len(U)))
 
         U_r = self.flux_reconstruction.apply(U, mu=mu)
         U_o = self.oswald_interpolation_error.apply(U)
 
         if elliptic_reconstruction:
+            assert False
             BU = d.operator.apply(U, mu=mu)
             BU_R = d.l2_product.apply_inverse(BU)
             F_R = d.l2_product.apply_inverse(d.rhs.as_source_array())
             BUF_R = BU_R - F_R
 
-        for ii in range(self.num_subdomains):
-            local_eta_nc[ii] = d.operators['nc_{}'.format(ii)].pairwise_apply2(U_o, U_o, mu=mu)
+        for ii, subdomain in enumerate(self.grid.subdomains_on_rank):
+            local_eta_nc[ii] = d.operators['nc_{}'.format(subdomain)].pairwise_apply2(U_o, U_o, mu=mu)
             local_eta_r[ii] += self.local_eta_rf_squared[ii]
-            local_eta_r[ii] -= 2*d.operators['r_fd_{}'.format(ii)].apply(U_r, mu=mu).data[:, 0]
-            local_eta_r[ii] += d.operators['r_dd_{}'.format(ii)].pairwise_apply2(U_r, U_r, mu=mu)
+            local_eta_r[ii] -= 2*d.operators['r_fd_{}'.format(subdomain)].apply(U_r, mu=mu).data[:, 0]
+            local_eta_r[ii] += d.operators['r_dd_{}'.format(subdomain)].pairwise_apply2(U_r, U_r, mu=mu)
             if elliptic_reconstruction:
-                local_eta_r[ii] += d.operators['r_l2_{}'.format(ii)].pairwise_apply2(BU_R, BU_R)
-                local_eta_r[ii] -= d.operators['r_l2_{}'.format(ii)].pairwise_apply2(F_R, F_R)
-                local_eta_r[ii] -= 2*d.operators['r_ud_{}'.format(ii)].pairwise_apply2(BUF_R, U_r, mu=mu)
+                local_eta_r[ii] += d.operators['r_l2_{}'.format(subdomain)].pairwise_apply2(BU_R, BU_R)
+                local_eta_r[ii] -= d.operators['r_l2_{}'.format(subdomain)].pairwise_apply2(F_R, F_R)
+                local_eta_r[ii] -= 2*d.operators['r_ud_{}'.format(subdomain)].pairwise_apply2(BUF_R, U_r, mu=mu)
 
-            local_eta_df[ii] += d.operators['df_aa_{}'.format(ii)].pairwise_apply2(U, U, mu=mu)
-            local_eta_df[ii] += d.operators['df_bb_{}'.format(ii)].pairwise_apply2(U_r, U_r, mu=mu)
-            local_eta_df[ii] += 2*d.operators['df_ab_{}'.format(ii)].pairwise_apply2(U, U_r, mu=mu)
+            local_eta_df[ii] += d.operators['df_aa_{}'.format(subdomain)].pairwise_apply2(U, U, mu=mu)
+            local_eta_df[ii] += d.operators['df_bb_{}'.format(subdomain)].pairwise_apply2(U_r, U_r, mu=mu)
+            local_eta_df[ii] += 2*d.operators['df_ab_{}'.format(subdomain)].pairwise_apply2(U, U_r, mu=mu)
 
             # eta r, scale
             poincaree_constant = 1./(np.pi**2)
@@ -124,16 +130,17 @@ class EstimatorBase(ImmutableInterface):
             subdomain_h = self.subdomain_diameters[ii]
             local_eta_r[ii] *= (poincaree_constant/min_diffusion_ev) * subdomain_h**2
 
-        local_eta_nc = np.sqrt(local_eta_nc)
-        local_eta_r = np.sqrt(local_eta_r)
-        local_eta_df = np.sqrt(local_eta_df)
+        with np.printoptions(precision=6, suppress=True):
+            self.logger.error('MPI DIFF')
+            self.logger.error(pprint.pformat((local_eta_nc, local_eta_r,local_eta_df)))
 
         eta = 0.
-        eta += np.sqrt(gamma_mu_mu_bar)      * np.linalg.norm(local_eta_nc, axis=0)
-        eta += (1./np.sqrt(alpha_mu_mu_hat)) * np.linalg.norm(local_eta_r + local_eta_df, axis=0)
+        eta += np.sqrt(gamma_mu_mu_bar)      * mpi_norm(local_eta_nc)
+        eta += (1./np.sqrt(alpha_mu_mu_hat)) * mpi_norm(local_eta_r + local_eta_df)
         eta *= 1./np.sqrt(alpha_mu_mu_bar)
 
         if decompose:
+            assert False
             local_indicators = np.array(
                 [(2./alpha_mu_mu_bar) * (gamma_mu_mu_bar * local_eta_nc[ii]**2 +
                                          (1./alpha_mu_mu_hat) * (local_eta_r[ii] + local_eta_df[ii])**2)
