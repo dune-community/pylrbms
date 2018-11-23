@@ -1,12 +1,12 @@
 #!/usr/bin/env python
-
+from mpi4py import MPI
 
 import numpy as np
 np.seterr(all='raise')
 
 from pymor.core.exceptions import ExtensionError
 from pymor.core.logger import getLogger, set_log_levels
-set_log_levels({'online_adaptive_lrbms': 'DEBUG',
+dbg_levels = ({'online_adaptive_lrbms': 'DEBUG',
                 'OS2015_academic_problem': 'INFO',
                 'discretize_elliptic_block_swipdg': 'DEBUG',
                 'offline': 'INFO',
@@ -15,8 +15,24 @@ set_log_levels({'online_adaptive_lrbms': 'DEBUG',
                 'dune.pylrbms': 'DEBUG',
                 'pymor.bindings.dunext': 'DEBUG',
                 'online_enrichment': 'DEBUG',
-                'lrbms': 'DEBUG'})
+                'lrbms': 'DEBUG',
+                'DXTC': 63})
+prod_levels = ({'online_adaptive_lrbms': 'INFO',
+                'OS2015_academic_problem': 'INFO',
+                'discretize_elliptic_block_swipdg': 'INFO',
+                'offline': 'INFO',
+                'pymor.operators.constructions': 'ERROR',
+                'dune.pylrbms.discretize_elliptic_block_swipdg': 'INFO',
+                'dune.pylrbms': 'ERROR',
+                'pymor.bindings.dunext': 'ERROR',
+                'online_enrichment': 'INFO',
+                'lrbms': 'INFO',
+                'DXTC': 54})
+log_levels = dbg_levels #prod_levels
+set_log_levels(log_levels)
 logger = getLogger('online_adaptive_lrbms.online_adaptive_lrbms')
+from dune.xt.common import logging
+logging.create(log_levels['DXTC'])
 from pymor.discretizations.basic import StationaryDiscretization
 
 from dune.pylrbms.OS2015_academic_problem import init_grid_and_problem
@@ -35,7 +51,7 @@ from dune.pylrbms.lrbms import LRBMSReductor
 # [6, 6], 4, [6, 6], 4: 0.585792065793
 # ===========================================================
 
-config = {'num_subdomains': [1, 1],
+config = {'num_subdomains': [2, 2],
           'half_num_fine_elements_per_subdomain_and_dim': 4,
           'initial_RB_order': 0,
           'enrichment_target_error': 1.,
@@ -43,79 +59,83 @@ config = {'num_subdomains': [1, 1],
           'marking_max_age': 2,
           'grid_type': 'alu'}
 
-
-grid_and_problem_data = init_grid_and_problem(config)
+mpi_comm = MPI.COMM_WORLD
+grid_and_problem_data = init_grid_and_problem(config, mpi_comm=mpi_comm)
 grid = grid_and_problem_data['grid']
 # grid.visualize('grid', False)
 
 solver_options = {'max_iter': '400', 'precision': '1e-10', 'post_check_solves_system': '1e-5', 'type': 'bicgstab.ilut',
- 'verbose': '4', 'preconditioner.iterations': '2', 'preconditioner.relaxation_factor': '1.0', }
+ 'verbose': '0', 'preconditioner.iterations': '2', 'preconditioner.relaxation_factor': '1.0', }
 
-LRBMS_d, data = discretize(grid_and_problem_data, solver_options={'inverse' :solver_options})
+LRBMS_d, data = discretize(grid_and_problem_data, solver_options={'inverse' :solver_options}, mpi_comm=mpi_comm)
 block_space = data['block_space']
-# d.disable_logging()
+# LRBMS_d.disable_logging()
 
-# logger.info('estimating some errors:')
-# errors = []
-# for mu in np.linspace(grid_and_problem_data['parameter_range'][0],
-#                       grid_and_problem_data['parameter_range'][1],
-#                       3):
-#     mu = d.parse_parameter(mu)
-#     print('  {}: '.format(mu), end='', flush=True)
-#     U = d.solve(mu)
-#     estimate = d.estimate(U, mu=mu)
-#     print(estimate)
-#     errors.append(estimate)
-# logger.info('')
+logger.info('estimating some errors:')
+errors = []
+for mu in np.linspace(grid_and_problem_data['parameter_range'][0],
+                      grid_and_problem_data['parameter_range'][1],
+                      3):
+
+    pass
+for mu in (grid_and_problem_data['parameter_range'][0],):
+    mu = LRBMS_d.parse_parameter(mu)
+    logger.info('  {}: '.format(mu))
+    U = LRBMS_d.solve(mu)
+    LRBMS_d.visualize(U, filename='high_solution_{}.vtu'.format((mu['diffusion'])))
+    estimate = LRBMS_d.estimate(U, mu=mu)
+    logger.info(estimate)
+    errors.append(estimate)
+logger.info('')
 
 
 # The estimator: either we
 #  (i)  use the offline/online decomposable estimator (large offline computational effort, instant online estimation); or we
 #  (ii) use the high-dimensional estimator (no offline effort, medium online effort).
 
-reductor = LRBMSReductor(
-    LRBMS_d,
-    products=[LRBMS_d.operators['local_energy_dg_product_{}'.format(ii)] for ii in range(block_space.num_blocks)],
-    order=config['initial_RB_order']
-)
+# reductor = LRBMSReductor(
+#     LRBMS_d,
+#     products=[LRBMS_d.operators['local_energy_dg_product_{}'.format(ii)] for ii in range(block_space.num_blocks)],
+#     order=config['initial_RB_order']
+# )
+#
+#
+# logger.info('adding some global solution snapshots to reduced basis ...')
+# for mu in (grid_and_problem_data['mu_min'], grid_and_problem_data['mu_max']):
+#     U = LRBMS_d.solve(mu)
+#     try:
+#         reductor.extend_basis(U)
+#     except ExtensionError:
+#         pass
+# logger.info('')
+#
+#
+# with logger.block('reducing ...') as _:
+#     rd = reductor.reduce()
+# logger.info('')
 
+# with logger.block('estimating some reduced errors:') as _:
+#     for mu in (grid_and_problem_data['mu_min'], grid_and_problem_data['mu_max']):
+#         mu = rd.parse_parameter(mu)
+#         logger.info('{} ... '.format(mu))
+#         U = rd.solve(mu)
+#         # rd.visualize(U, filename=str(mu))
+#         estimate = rd.estimate(U, mu=mu)
+#         logger.info('    {}'.format(estimate))
+# logger.info('')
 
-logger.info('adding some global solution snapshots to reduced basis ...')
-for mu in (grid_and_problem_data['mu_min'], grid_and_problem_data['mu_max']):
-    U = LRBMS_d.solve(mu)
-    try:
-        reductor.extend_basis(U)
-    except ExtensionError:
-        pass
-logger.info('')
+# logger.info('online phase:')
+# online_adaptive_LRBMS = AdaptiveEnrichment(grid_and_problem_data, LRBMS_d, block_space,
+#                                            reductor, rd, config['enrichment_target_error'],
+#                                            config['marking_doerfler_theta'],
+#                                            config['marking_max_age'])
+# for mu in rd.parameter_space.sample_randomly(20):
+#     U, _, _ = online_adaptive_LRBMS.solve(mu)
 
-
-with logger.block('reducing ...') as _:
-    rd = reductor.reduce()
-logger.info('')
-
-with logger.block('estimating some reduced errors:') as _:
-    for mu in (grid_and_problem_data['mu_min'], grid_and_problem_data['mu_max']):
-        mu = rd.parse_parameter(mu)
-        logger.info('{} ... '.format(mu))
-        U = rd.solve(mu)
-        # rd.visualize(U, filename=str(mu))
-        estimate = rd.estimate(U, mu=mu)
-        logger.info('    {}'.format(estimate))
-logger.info('')
-
-logger.info('online phase:')
-online_adaptive_LRBMS = AdaptiveEnrichment(grid_and_problem_data, LRBMS_d, block_space,
-                                           reductor, rd, config['enrichment_target_error'],
-                                           config['marking_doerfler_theta'],
-                                           config['marking_max_age'])
-for mu in rd.parameter_space.sample_randomly(20):
-    U, _, _ = online_adaptive_LRBMS.solve(mu)
-
-logger.info('')
-logger.info('local basis sizes:')
-for name, basis in online_adaptive_LRBMS.reductor.bases.items():
-    logger.info('{}: {}'.format(name, len(basis)))
-logger.info('finished')
+# logger.info('')
+# logger.info('local basis sizes:')
+# for name, basis in online_adaptive_LRBMS.reductor.bases.items():
+#     logger.info('{}: {}'.format(name, len(basis)))
+# logger.info('finished')
 
 
