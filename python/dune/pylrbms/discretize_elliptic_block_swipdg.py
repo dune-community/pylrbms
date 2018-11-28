@@ -473,10 +473,10 @@ def discretize_lhs(lambda_func, grid, block_space, local_patterns, boundary_patt
     logger.debug('discretize lhs block op ...')
     ops = np.full((grid.num_subdomains, grid.num_subdomains), None)
     for (ii, jj), mat in np.ndenumerate(mats):
-        ops[ii, jj] = DuneXTMatrixOperator(mat,
+        ops[ii, jj] = DuneXTMatrixOperator(mat, name='local_block_{}-{}'.format(ii,jj),
                                            source_id='domain_{}'.format(jj),
                                            range_id='domain_{}'.format(ii)) if mat else None
-    block_op = BlockOperator(ops, dof_communicator=block_space.dof_communicator)
+    block_op = BlockOperator(ops, dof_communicator=block_space.dof_communicator, name='BlockOp')
     return op, block_op
 
 
@@ -557,7 +557,7 @@ def discretize(grid_and_problem_data, solver_options, mpi_comm):
     ops, block_ops = zip(*(discretize_lhs(lf, grid, block_space, local_patterns, boundary_patterns,
                                           coupling_matrices, kappa, local_all_neumann_boundary_info, boundary_info,
                                           coupling_patterns, solver_options) for lf in lambda_funcs))
-    global_operator = LincombOperator(ops, lambda_coeffs, solver_options=solver_options)
+    global_operator = LincombOperator(ops, lambda_coeffs, solver_options=solver_options, name='GlobalOperator')
     logger.debug('block op global done ')
     block_op = LincombOperator(block_ops, lambda_coeffs, name='lhs', solver_options=solver_options)
     logger.debug('block op done ')
@@ -758,7 +758,7 @@ def discretize(grid_and_problem_data, solver_options, mpi_comm):
     else:
         local_eta_rf_squared = None
     estimator = EllipticEstimator(grid, min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs,
-                                  mu_bar, mu_hat, flux_reconstruction_op, oswald_interpolation_error=oi_op,
+                                  mu_bar, mu_hat, fr_op, oswald_interpolation_error=oi_op,
                                   mpi_comm = mpi_comm)
     l2_product = BlockDiagonalOperator(local_l2_products)
 
