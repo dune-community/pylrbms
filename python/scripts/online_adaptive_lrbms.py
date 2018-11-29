@@ -81,7 +81,7 @@ for mu in np.linspace(grid_and_problem_data['parameter_range'][0],
 for mu in (grid_and_problem_data['parameter_range'][0],):
     mu = LRBMS_d.parse_parameter(mu)
     logger.info('  {}: '.format(mu))
-    U = LRBMS_d.solve(mu)
+    U = LRBMS_d.solve(mu, inverse_options=solver_options)
     LRBMS_d.visualize(U, filename='high_solution_{}.vtu'.format((mu['diffusion'])))
     estimate = LRBMS_d.estimate(U, mu=mu)
     logger.info(estimate)
@@ -123,6 +123,9 @@ logger.info('')
 #         estimate = rd.estimate(U, mu=mu)
 #         logger.info('    {}'.format(estimate))
 # logger.info('')
+red_solver_options = solver_options.copy()
+red_solver_options['mpi_comm'] = mpi_comm
+red_solver_options['type'] = 'mpi-manual_direct'
 
 # logger.info('online phase:')
 # online_adaptive_LRBMS = AdaptiveEnrichment(grid_and_problem_data, LRBMS_d, block_space,

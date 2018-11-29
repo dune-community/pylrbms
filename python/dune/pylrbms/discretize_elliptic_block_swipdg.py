@@ -209,15 +209,15 @@ class DuneDiscretization(DuneDiscretizationBase, StationaryDiscretization):
         self.data = data
         self.block_operator=operator
 
-    def _solve(self, mu):
+    def _solve(self, mu, inverse_options=None):
         if not self.logging_disabled:
             self.logger.info('Solving {} for {} ...'.format(self.name, mu))
 
         return self.solution_space.from_data(
-            self.global_operator.apply_inverse(self.global_rhs.as_vector(mu=mu), mu=mu).data
+            self.global_operator.apply_inverse(self.global_rhs.as_vector(mu=mu), mu=mu, inverse_options=inverse_options).data
         )
 
-    def solve_for_local_correction(self, subdomain, Us, mu=None):
+    def solve_for_local_correction(self, subdomain, Us, mu=None, inverse_options=None):
         grid, local_boundary_info, affine_lambda, kappa, f, block_space = self.enrichment_data
         neighborhood = self.neighborhoods[subdomain]
         neighborhood_space = block_space.restricted_to_neighborhood(neighborhood)
@@ -272,7 +272,7 @@ class DuneDiscretization(DuneDiscretizationBase, StationaryDiscretization):
                                for o in ops],
                               ops_coeffs)
         rhs = LincombOperator([VectorFunctional(lhs.range.make_array([v.vector()])) for v in funcs], funcs_coeffs)
-        correction = lhs.apply_inverse(rhs.as_source_array(mu), mu=mu)
+        correction = lhs.apply_inverse(rhs.as_source_array(mu), mu=mu, inverse_options=inverse_options)
         assert len(correction) == 1
         # restrict to subdomain
         local_sizes = [block_space.local_space(nn).size() for nn in neighborhood]

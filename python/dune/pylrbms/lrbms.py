@@ -13,8 +13,9 @@ from pymor.parallel.mpi import norm as mpi_norm
 
 class LRBMSReductor(GenericRBSystemReductor):
 
-    def __init__(self, d, bases=None, products=None, order=None, num_cpus=1):
+    def __init__(self, d, bases=None, products=None, order=None, num_cpus=1, solver_options=None):
         assert order is None or 0 <= order <= 1
+        self.solver_options = solver_options
         super().__init__(d, bases=bases, products=products)
 
         if order is None and bases is None:
