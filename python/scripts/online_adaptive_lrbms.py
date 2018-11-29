@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from mpi4py import MPI
-
+import sys
+import pprint
 import numpy as np
 np.seterr(all='raise')
 
@@ -13,7 +14,7 @@ dbg_levels = ({'online_adaptive_lrbms': 'DEBUG',
                 'pymor.operators.constructions': 'DEBUG',
                 'dune.pylrbms.discretize_elliptic_block_swipdg': 'DEBUG',
                 'dune.pylrbms': 'DEBUG',
-                'pymor.bindings.dunext': 'DEBUG',
+                'pymor.bindings.dunext': 'ERROR',
                 'online_enrichment': 'DEBUG',
                 'lrbms': 'DEBUG',
                 'DXTC': 63})
@@ -70,6 +71,7 @@ solver_options = {'max_iter': '400', 'precision': '1e-10', 'post_check_solves_sy
 LRBMS_d, data = discretize(grid_and_problem_data, solver_options={'inverse' :solver_options}, mpi_comm=mpi_comm)
 block_space = data['block_space']
 # LRBMS_d.disable_logging()
+logger.debug('FULL OP DIM {}x{}'.format(LRBMS_d.operator.source.dim, LRBMS_d.operator.range.dim))
 
 logger.info('estimating some errors:')
 errors = []
@@ -84,48 +86,63 @@ for mu in (grid_and_problem_data['parameter_range'][0],):
     U = LRBMS_d.solve(mu, inverse_options=solver_options)
     LRBMS_d.visualize(U, filename='high_solution_{}.vtu'.format((mu['diffusion'])))
     estimate = LRBMS_d.estimate(U, mu=mu)
-    logger.info(estimate)
+    # logger.info(estimate)
     errors.append(estimate)
-logger.info('')
-
-
 # The estimator: either we
 #  (i)  use the offline/online decomposable estimator (large offline computational effort, instant online estimation); or we
 #  (ii) use the high-dimensional estimator (no offline effort, medium online effort).
 
-# reductor = LRBMSReductor(
-#     LRBMS_d,
-#     products=[LRBMS_d.operators['local_energy_dg_product_{}'.format(ii)] for ii in range(block_space.num_blocks)],
-#     order=config['initial_RB_order']
-# )
-#
-#
-# logger.info('adding some global solution snapshots to reduced basis ...')
-# for mu in (grid_and_problem_data['mu_min'], grid_and_problem_data['mu_max']):
-#     U = LRBMS_d.solve(mu)
-#     try:
-#         reductor.extend_basis(U)
-#     except ExtensionError:
-#         pass
-# logger.info('')
-#
-#
-# with logger.block('reducing ...') as _:
-#     rd = reductor.reduce()
-# logger.info('')
-
-# with logger.block('estimating some reduced errors:') as _:
-#     for mu in (grid_and_problem_data['mu_min'], grid_and_problem_data['mu_max']):
-#         mu = rd.parse_parameter(mu)
-#         logger.info('{} ... '.format(mu))
-#         U = rd.solve(mu)
-#         # rd.visualize(U, filename=str(mu))
-#         estimate = rd.estimate(U, mu=mu)
-#         logger.info('    {}'.format(estimate))
-# logger.info('')
 red_solver_options = solver_options.copy()
 red_solver_options['mpi_comm'] = mpi_comm
 red_solver_options['type'] = 'mpi-manual_direct'
+reductor = LRBMSReductor(
+    LRBMS_d,
+    products=[LRBMS_d.operators['local_energy_dg_product_{}'.format(ii)] for ii in range(block_space.num_blocks)],
+    order=config['initial_RB_order']
+)
+
+
+logger.info('adding some global solution snapshots to reduced basis ...')
+for mu in (grid_and_problem_data['mu_min'], grid_and_problem_data['mu_max']):
+    U = LRBMS_d.solve(mu)
+    try:
+        reductor.extend_basis(U)
+    except ExtensionError as e:
+        logger.error(e)
+logger.info('')
+logger.debug('Bases count {} '.format(len(reductor.bases)))
+# logger.debug(pprint.pformat(reductor.bases))
+with np.printoptions(threshold=np.inf):
+    logger.debug('DOM 0\n' + pprint.pformat(reductor.bases['domain_0'].data))
+sys.exit(0)
+
+
+with logger.block('reducing ...') as _:
+    rd = reductor.reduce()
+
+logger.debug('RED  OP DIM {}x{}'.format(rd.operator.source.dim, rd.operator.range.dim))
+
+# raise RuntimeError('STOP')
+
+with logger.block('estimating some reduced errors:') as _:
+    # for mu in (grid_and_problem_data['mu_min'], grid_and_problem_data['mu_max']):
+    for mu in (grid_and_problem_data['mu_min'], ):
+        mu = rd.parse_parameter(mu)
+        logger.info('{} ... '.format(mu))
+        U = rd.solve(mu, inverse_options=red_solver_options)
+        ur = reductor.reconstruct(U)
+        LRBMS_d.visualize(ur, filename='recons_'+str(mu['diffusion']))
+        estimate = rd.estimate(U, mu=mu)
+        logger.info('reduced {}'.format(estimate))
+        U = LRBMS_d.solve(mu)
+        estimate = LRBMS_d.estimate(ur, mu=mu)
+        logger.info('high  recon  {}'.format(estimate))
+        estimate = LRBMS_d.estimate(U, mu=mu)
+        logger.info('high  full   {}'.format(estimate))
+        diff = U-ur
+        LRBMS_d.visualize(diff, filename='diff_recon')
+
+logger.info('')
 
 # logger.info('online phase:')
 # online_adaptive_LRBMS = AdaptiveEnrichment(grid_and_problem_data, LRBMS_d, block_space,
