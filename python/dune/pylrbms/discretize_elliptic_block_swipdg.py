@@ -453,18 +453,15 @@ def discretize_lhs(lambda_func, grid, block_space, local_patterns, boundary_patt
     logger.debug('discretize lhs global op done ...')
     mats = np.full((num_global_subdomains, num_global_subdomains), None)
     for ii in range(num_global_subdomains):
+        ii_size = block_space.local_space(ii).size()
         for jj in range(ii, num_global_subdomains):
+            jj_size = block_space.local_space(jj).size()
             if ii == jj:
-                mats[ii, ii] = Matrix(block_space.local_space(ii).size(),
-                                      block_space.local_space(ii).size(),
-                                      local_patterns[ii])
+                mats[ii, ii] = Matrix(ii_size, ii_size, local_patterns[ii])
             elif (ii, jj) in coupling_matrices['in_out']:
-                mats[ii, jj] = Matrix(block_space.local_space(ii).size(),
-                                      block_space.local_space(jj).size(),
-                                      coupling_patterns['in_out'][(ii, jj)])
-                mats[jj, ii] = Matrix(block_space.local_space(jj).size(),
-                                      block_space.local_space(ii).size(),
-                                      coupling_patterns['out_in'][(ii, jj)])
+                mats[ii, jj] = Matrix(ii_size, jj_size, coupling_patterns['in_out'][(ii, jj)])
+                mats[jj, ii] = Matrix(jj_size, ii_size, coupling_patterns['out_in'][(ii, jj)])
+
 
     for ii in range(num_global_subdomains):
         for jj in range(ii, num_global_subdomains):
@@ -484,6 +481,7 @@ def discretize_lhs(lambda_func, grid, block_space, local_patterns, boundary_patt
         ops[ii, jj] = DuneXTMatrixOperator(mat, name='local_block_{}-{}'.format(ii,jj),
                                            source_id='domain_{}'.format(jj),
                                            range_id='domain_{}'.format(ii)) if mat else None
+
     block_op = BlockOperator(ops, dof_communicator=block_space.dof_communicator, name='BlockOp')
     return op, block_op
 
@@ -532,24 +530,18 @@ def discretize(grid_and_problem_data, solver_options, mpi_comm):
     coupling_matrices = {'in_in': {}, 'out_out': {}, 'in_out': {}, 'out_in': {}}
 
     for ii in range(num_global_subdomains):
+        ii_size = block_space.local_space(ii).size()
         for jj in grid.neighboring_subdomains(ii):
+            jj_size = block_space.local_space(jj).size()
             if ii < jj:  # Assemble primally (visit each coupling only once).
                 coupling_patterns['in_in'][(ii, jj)] = block_space.local_space(ii).compute_pattern('face_and_volume')
                 coupling_patterns['out_out'][(ii, jj)] = block_space.local_space(jj).compute_pattern('face_and_volume')
                 coupling_patterns['in_out'][(ii, jj)] = block_space.compute_coupling_pattern(ii, jj, 'face')
                 coupling_patterns['out_in'][(ii, jj)] = block_space.compute_coupling_pattern(jj, ii, 'face')
-                coupling_matrices['in_in'][(ii, jj)] = Matrix(block_space.local_space(ii).size(),
-                                                           block_space.local_space(ii).size(),
-                                                           coupling_patterns['in_in'][(ii, jj)])
-                coupling_matrices['out_out'][(ii, jj)] = Matrix(block_space.local_space(jj).size(),
-                                                             block_space.local_space(jj).size(),
-                                                             coupling_patterns['out_out'][(ii, jj)])
-                coupling_matrices['in_out'][(ii, jj)] = Matrix(block_space.local_space(ii).size(),
-                                                            block_space.local_space(jj).size(),
-                                                            coupling_patterns['in_out'][(ii, jj)])
-                coupling_matrices['out_in'][(ii, jj)] = Matrix(block_space.local_space(jj).size(),
-                                                            block_space.local_space(ii).size(),
-                                                            coupling_patterns['out_in'][(ii, jj)])
+                coupling_matrices['in_in'][(ii, jj)] = Matrix(ii_size, ii_size, coupling_patterns['in_in'][(ii, jj)])
+                coupling_matrices['out_out'][(ii, jj)] = Matrix(jj_size, jj_size, coupling_patterns['out_out'][(ii, jj)])
+                coupling_matrices['in_out'][(ii, jj)] = Matrix(ii_size, jj_size, coupling_patterns['in_out'][(ii, jj)])
+                coupling_matrices['out_in'][(ii, jj)] = Matrix(jj_size, ii_size, coupling_patterns['out_in'][(ii, jj)])
     boundary_patterns = {}
     for ii in grid.boundary_subdomains():
         boundary_patterns[ii] = block_space.local_space(ii).compute_pattern('face_and_volume')
