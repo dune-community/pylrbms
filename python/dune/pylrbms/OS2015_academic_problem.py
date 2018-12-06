@@ -13,7 +13,7 @@ from dune.xt.functions import (
 from pymor.core.logger import getLogger
 from pymor.parameters.functionals import ExpressionParameterFunctional
 
-from dune.pylrbms.grid import make_grid, make_boundary_info
+from dune.pylrbms.grid import make_grid, make_boundary_info, grid_info
 
 
 def init_grid_and_problem(config, mu_bar = 1, mu_hat = 1, mpi_comm = MPI.COMM_WORLD):
@@ -29,6 +29,7 @@ def init_grid_and_problem(config, mu_bar = 1, mu_hat = 1, mpi_comm = MPI.COMM_WO
                      config['half_num_fine_elements_per_subdomain_and_dim'],
                      inner_boundary_id, grid_type=config['grid_type'],
                      mpi_comm=mpi_comm)
+    grid_info(logger.error, grid)
     all_dirichlet_boundary_info = make_boundary_info(grid, {'type': 'xt.grid.boundaryinfo.alldirichlet'})
 
     diffusion_functions = [make_expression_function_1x1(

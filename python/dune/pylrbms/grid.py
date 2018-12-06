@@ -53,3 +53,17 @@ def make_boundary_info(grid, config):
         return make_boundary_info_on_dd_subdomain_boundary_layer(grid, config)
     except:
         return make_boundary_info_on_leaf_layer(grid, config)
+
+
+def grid_info(log, grid):
+    tpl = '''
+**************************************************************
+* Grid Type {}
+* # Subdomains {}
+* Process subdomains {}
+* First Neighbors {}
+* Boundary Subdomains {}
+**************************************************************
+    '''
+    log(tpl.format(str(type(grid)), grid.num_subdomains, grid.subdomains_on_rank,
+        grid.neighboring_subdomains(grid.subdomains_on_rank[0]), grid.boundary_subdomains()))
