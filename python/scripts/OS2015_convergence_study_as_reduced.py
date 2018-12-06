@@ -4,7 +4,7 @@ from functools import partial
 
 from dune.pylrbms.OS2015_academic_problem import init_grid_and_problem
 from dune.pylrbms.EOC import StationaryEocStudy
-from dune.pylrbms.lrbms import LRBMSReductor
+from dune.pylrbms.estimators import LRBMSReductor
 
 
 def refine(coarse_cfg):

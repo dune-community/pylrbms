@@ -6,7 +6,7 @@ from pymor.core.exceptions import ExtensionError
 
 from dune.pylrbms.artificial_channels_problem import init_grid_and_problem
 from dune.pylrbms.discretize_parabolic_block_swipdg import discretize
-from dune.pylrbms.lrbms import ParabolicLRBMSReductor
+from dune.pylrbms.estimators import ParabolicLRBMSReductor
 
 from pymor.core.logger import set_log_levels
 set_log_levels({'discretize_elliptic_block_swipdg': 'INFO',

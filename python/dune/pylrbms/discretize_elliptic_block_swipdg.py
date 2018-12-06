@@ -60,7 +60,7 @@ from pymor.parameters.spaces import CubicParameterSpace
 from pymor.vectorarrays.block import BlockVectorSpace
 
 
-from dune.pylrbms.lrbms import EllipticEstimator
+from dune.pylrbms.estimators import EllipticEstimator
 
 def _get_subdomains(grid):
     ls = grid.subdomains_on_rank

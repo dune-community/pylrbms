@@ -9,7 +9,7 @@ from pymor.parameters.spaces import CubicParameterSpace
 
 from dune.pylrbms.discretize_elliptic_block_swipdg import DuneDiscretizationBase
 from dune.pylrbms.discretize_elliptic_block_swipdg import discretize as discretize_ell
-from dune.pylrbms.lrbms import ParabolicEstimator
+from dune.pylrbms.estimators import ParabolicEstimator
 
 
 class InstationaryDuneDiscretization(DuneDiscretizationBase, InstationaryDiscretization):

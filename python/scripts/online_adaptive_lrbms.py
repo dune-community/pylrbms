@@ -40,7 +40,7 @@ from dune.pylrbms.OS2015_academic_problem import init_grid_and_problem
 # from local_thermalblock_problem import init_grid_and_problem
 from dune.pylrbms.discretize_elliptic_block_swipdg import discretize
 from dune.pylrbms.online_enrichment import AdaptiveEnrichment
-from dune.pylrbms.lrbms import LRBMSReductor
+from dune.pylrbms.reductor import LRBMSReductor, ParallelLRBMSReductor
 
 # max discretization error, to derive enrichment_target_error
 # ===========================================================
@@ -95,7 +95,7 @@ for mu in (grid_and_problem_data['parameter_range'][0],):
 red_solver_options = solver_options.copy()
 red_solver_options['mpi_comm'] = mpi_comm
 red_solver_options['type'] = 'mpi-manual_direct'
-reductor = LRBMSReductor(
+reductor = ParallelLRBMSReductor(
     LRBMS_d,
     products=[LRBMS_d.operators['local_energy_dg_product_{}'.format(ii)] for ii in range(block_space.num_blocks)],
     order=config['initial_RB_order']
