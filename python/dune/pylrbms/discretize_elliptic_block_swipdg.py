@@ -2,7 +2,7 @@ import numpy as np
 from mpi4py import MPI
 
 from dune.xt.grid.walker import (
-    make_apply_on_dirichlet_intersections_dd_subdomain_boundary_view as make_apply_on_dirichlet_intersections,
+    make_apply_on_dirichlet_intersections,
     make_walker_on_dd_subdomain_view as make_subdomain_walker
 )
 from dune.xt.grid.boundaryinfo import make_boundary_info_on_dd_subdomain_layer as make_subdomain_boundary_info
@@ -15,7 +15,7 @@ from dune.xt.la import (
 
 import dune.gdt
 
-from dune.gdt.spaces import make_rt_leaf_view_to_2x1_gdt_p0_space as make_rt_space
+from dune.gdt.spaces import make_rt_space
 from dune.gdt.spaces import make_block_dg_space
 
 from dune.gdt.__local_elliptic_ipdg_operators import (
