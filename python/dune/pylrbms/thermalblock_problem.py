@@ -28,8 +28,7 @@ def init_grid_and_problem(config, mu_bar=(1, 1, 1, 1), mu_hat=(1, 1, 1, 1)):
     grid = make_grid((lower_left, upper_right),
                      config['num_subdomains'],
                      config['half_num_fine_elements_per_subdomain_and_dim'],
-                     inner_boundary_id,
-                     grid_type=config['grid_type'])
+                     inner_boundary_id)
     all_dirichlet_boundary_info = make_boundary_info(grid, {'type': 'xt.grid.boundaryinfo.alldirichlet'})
 
     XBLOCKS = 2; YBLOCKS = 2

@@ -57,8 +57,7 @@ config = {'num_subdomains': [2, 2],
           'initial_RB_order': 0,
           'enrichment_target_error': 1.,
           'marking_doerfler_theta': 0.8,
-          'marking_max_age': 2,
-          'grid_type': 'alu'}
+          'marking_max_age': 0}
 
 mpi_comm = MPI.COMM_WORLD
 grid_and_problem_data = init_grid_and_problem(config, mpi_comm=mpi_comm)
