@@ -47,7 +47,7 @@ def init_grid_and_problem(config, mu_bar = 1, mu_hat = 1, mpi_comm = MPI.COMM_WO
     lambda_bar = make_expression_function_1x1(
         grid, 'x', '1+(1-{})*(cos(0.5*pi*x[0])*cos(0.5*pi*x[1]))'.format(mu_bar), order=2, name='lambda_bar')
     lambda_hat = make_expression_function_1x1(
-        grid, 'x', '1+(1-{})*(cos(0.5*pi*x[0])*cos(0.5*pi*x[1]))'.format(mu_hat), order=2, name='lambda_bar')
+        grid, 'x', '1+(1-{})*(cos(0.5*pi*x[0])*cos(0.5*pi*x[1]))'.format(mu_hat), order=2, name='lambda_hat')
 
     return {'grid': grid,
             'mpi_comm': mpi_comm,

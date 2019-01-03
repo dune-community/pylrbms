@@ -403,7 +403,7 @@ def discretize_lhs(lambda_func, grid, block_space, local_patterns, boundary_patt
 
     logger.debug('discretize lhs boundary ...')
     local_ipdg_boundary_operator = make_local_elliptic_swipdg_boundary_operator(lambda_func, kappa)
-    apply_on_dirichlet_intersections = make_apply_on_dirichlet_intersections(boundary_info)
+    apply_on_dirichlet_intersections = make_apply_on_dirichlet_intersections(boundary_info, grid=grid, layer='dd_subdomain_boundary_view')
 
     def assemble_boundary_contributions(subdomain):
         boundary_assembler = block_space.boundary_assembler(subdomain)

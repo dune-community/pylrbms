@@ -79,7 +79,6 @@ class EstimatorBase(ImmutableInterface):
         eta *= 1./np.sqrt(alpha_mu_mu_bar)
 
         if decompose:
-            assert False
             local_indicators = np.array(
                 [(2./alpha_mu_mu_bar) * (gamma_mu_mu_bar * local_eta_nc[ii]**2 +
                                          (1./alpha_mu_mu_hat) * (local_eta_r[ii] + local_eta_df[ii])**2)
