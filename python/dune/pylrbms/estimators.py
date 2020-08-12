@@ -9,12 +9,25 @@ from pymor.operators.constructions import LincombOperator
 from pymor.operators.numpy import NumpyMatrixOperator
 from pymor.reductors.system import GenericRBSystemReductor
 from pymor.parallel.mpi import norm as mpi_norm
+from pymor.bindings.dunegdt import DuneGDTVisualizer
 
+from dune.gdt.discretefunction import make_discrete_function
+from pymor.vectorarrays.list import ListVectorArray
+
+def _vis(U, global_space, name):
+    assert len(U) == 1
+    dd = U.data
+    ud = make_discrete_function(global_space, name)
+    print('vec size {} | space {} | df {}'.format(len(dd[0]), global_space.size(), len(ud)))
+    for ii in range(global_space.size()):
+        ud.setitem(ii, dd[0][ii])
+    ud.visualize(name)
 
 class EstimatorBase(ImmutableInterface):
 
     def __init__(self, grid, min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs, mu_bar, mu_hat,
-                 flux_reconstruction, oswald_interpolation_error, mpi_comm):
+                 flux_reconstruction, oswald_interpolation_error, mpi_comm, global_rt_space=None,
+                 global_dg_space=None):
         self.grid = grid
         self.min_diffusion_evs = min_diffusion_evs
         self.subdomain_diameters = subdomain_diameters
@@ -26,6 +39,8 @@ class EstimatorBase(ImmutableInterface):
         self.oswald_interpolation_error = oswald_interpolation_error
         self.num_subdomains = len(grid.subdomains_on_rank)
         self.mpi_comm = mpi_comm
+        self.global_rt_space = global_rt_space
+        self.global_dg_space = global_dg_space
 
     def _estimate_elliptic(self, U, mu, d, elliptic_reconstruction=False, decompose=False):
         alpha_mu_mu_bar = self.alpha(self.lambda_coeffs, mu, self.mu_bar)
@@ -38,7 +53,12 @@ class EstimatorBase(ImmutableInterface):
         local_eta_df = np.zeros((vec_size, len(U)))
 
         U_r = self.flux_reconstruction.apply(U, mu=mu)
+        U_r_u = self.flux_reconstruction.operators[0].range.from_data(U_r.data)
+        # _vis(U_r, self.global_rt_space, name=f'flux_recon_{mu["diffusion"][0]}')
+
         U_o = self.oswald_interpolation_error.apply(U)
+        U_o_u = self.oswald_interpolation_error.range.from_data(U_o.data)
+        # _vis(U_o, self.global_dg_space, name=f'oswald_inter_error_{mu["diffusion"][0]}')
 
         if elliptic_reconstruction:
             assert False
@@ -50,8 +70,11 @@ class EstimatorBase(ImmutableInterface):
         for ii, subdomain in enumerate(self.grid.subdomains_on_rank):
             local_eta_nc[ii] = d.operators['nc_{}'.format(subdomain)].pairwise_apply2(U_o, U_o, mu=mu)
             local_eta_r[ii] += self.local_eta_rf_squared[ii]
-            local_eta_r[ii] -= 2*d.operators['r_fd_{}'.format(subdomain)].apply(U_r, mu=mu).data[:, 0]
-            local_eta_r[ii] += d.operators['r_dd_{}'.format(subdomain)].pairwise_apply2(U_r, U_r, mu=mu)
+            r_fd = d.operators['r_fd_{}'.format(subdomain)].apply(U_r, mu=mu).data[:, 0]
+            local_eta_r[ii] -= 2*r_fd
+            r_dd = d.operators['r_dd_{}'.format(subdomain)].pairwise_apply2(U_r, U_r, mu=mu)
+            local_eta_r[ii] += r_dd
+            self.logger.debug('Subdomain {}: r_fd {} | r_dd {}'.format(subdomain, r_fd, r_dd))
             if elliptic_reconstruction:
                 local_eta_r[ii] += d.operators['r_l2_{}'.format(subdomain)].pairwise_apply2(BU_R, BU_R)
                 local_eta_r[ii] -= d.operators['r_l2_{}'.format(subdomain)].pairwise_apply2(F_R, F_R)
@@ -68,10 +91,10 @@ class EstimatorBase(ImmutableInterface):
             local_eta_r[ii] *= (poincaree_constant/min_diffusion_ev) * subdomain_h**2
 
         with np.printoptions(precision=6, suppress=True):
-            self.logger.debug('MPI DIFF')
+            self.logger.debug('Estimated for subdomains {}'.format(self.grid.subdomains_on_rank))
             err = {'eta_nc': local_eta_nc, 'eta_r': local_eta_r, 'eta_df': local_eta_df}
             self.logger.debug('\n'+pprint.pformat(err))
-            self.logger.debug(str(self.mpi_comm))
+            # self.logger.debug()
 
         eta = 0.
         eta += np.sqrt(gamma_mu_mu_bar)      * mpi_norm(local_eta_nc)

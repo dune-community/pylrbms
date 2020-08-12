@@ -35,7 +35,7 @@ from dune.pylrbms.discretize_elliptic_block_swipdg import discretize
 # ===========================================================
 
 config = {'num_subdomains': [2,2],
-          'half_num_fine_elements_per_subdomain_and_dim': 2,
+          'half_num_fine_elements_per_subdomain_and_dim': 4,
           'initial_RB_order': 0,
           'enrichment_target_error': 1.,
           'marking_doerfler_theta': 0.8,

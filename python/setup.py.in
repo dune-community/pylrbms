@@ -34,6 +34,7 @@ except CalledProcessError as e:
 
 setup(name='dune.pylrbms',
       version='0.1',
+      setup_requires=['pip<20'],
       namespace_packages=['dune'],
       description='LRBMS with pyMOR and dune-gdt',
       author='',

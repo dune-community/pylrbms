@@ -29,25 +29,25 @@ def init_grid_and_problem(config, mu_bar = 1, mu_hat = 1, mpi_comm = MPI.COMM_WO
                      config['half_num_fine_elements_per_subdomain_and_dim'],
                      inner_boundary_id,
                      mpi_comm=mpi_comm)
-    grid_info(logger.error, grid)
+    grid_info(logger.error, grid, mpi_comm)
     all_dirichlet_boundary_info = make_boundary_info(grid, {'type': 'xt.grid.boundaryinfo.alldirichlet'})
 
+    cos = '(cos(0.5*pi*x[0])*cos(0.5*pi*x[1]))'
     diffusion_functions = [make_expression_function_1x1(
-        grid, 'x', '1+(cos(0.5*pi*x[0])*cos(0.5*pi*x[1]))', order=2, name='lambda_0'),
-        make_expression_function_1x1(grid, 'x', '-1*(cos(0.5*pi*x[0])*cos(0.5*pi*x[1]))', order=2, name='lambda_1')]
-    diffusion_functions = [make_expression_function_1x1(
-        grid, 'x', '1', order=2, name='lambda_0'),
-        make_expression_function_1x1(grid, 'x', 'x[0]', order=2, name='lambda_1')]
+        grid, 'x', '1+{}'.format(cos), order=2, name='lambda_0'),
+        make_expression_function_1x1(grid, 'x', '-1*{}'.format(cos), order=2, name='lambda_1')]
+    # diffusion_functions = [make_expression_function_1x1(
+    #     grid, 'x', '1', order=2, name='lambda_0'),
+    #     make_expression_function_1x1(grid, 'x', 'x[0]', order=2, name='lambda_1')]
     parameter_type = {'diffusion': (1,)}
     coefficients = [ExpressionParameterFunctional('1.', parameter_type),
                     ExpressionParameterFunctional('diffusion', parameter_type)]
 
     kappa = make_constant_function_2x2(grid, [[1., 0.], [0., 1.]], name='kappa')
-    f = make_expression_function_1x1(grid, 'x', '0.5*pi*pi*cos(0.5*pi*x[0])*cos(0.5*pi*x[1])', order=2, name='f')
-    lambda_bar = make_expression_function_1x1(
-        grid, 'x', '1+(1-{})*(cos(0.5*pi*x[0])*cos(0.5*pi*x[1]))'.format(mu_bar), order=2, name='lambda_bar')
-    lambda_hat = make_expression_function_1x1(
-        grid, 'x', '1+(1-{})*(cos(0.5*pi*x[0])*cos(0.5*pi*x[1]))'.format(mu_hat), order=2, name='lambda_hat')
+    f = make_expression_function_1x1(grid, 'x', '0.5*pi*pi*{}'.format(cos), order=2, name='f')
+    mbc = '1+(1-{})*{}'.format(mu_bar, cos)
+    lambda_bar = make_expression_function_1x1(grid, 'x', mbc, order=2, name='lambda_bar')
+    lambda_hat = make_expression_function_1x1(grid, 'x', mbc, order=2, name='lambda_hat')
 
     return {'grid': grid,
             'mpi_comm': mpi_comm,
