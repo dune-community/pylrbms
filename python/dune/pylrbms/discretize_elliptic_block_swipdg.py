@@ -53,6 +53,7 @@ from pymor.core.interfaces import ImmutableInterface
 from pymor.core.logger import getLogger
 from pymor.discretizations.basic import StationaryDiscretization
 from pymor.operators.basic import OperatorBase
+from pymor.operators.numpy import NumpyMatrixOperator
 from pymor.operators.block import BlockOperator, BlockDiagonalOperator, BlockProjectionOperator, BlockRowOperator
 from pymor.operators.constructions import LincombOperator, VectorFunctional, Concatenation
 from pymor.parameters.functionals import ProductParameterFunctional
@@ -234,6 +235,7 @@ class DuneDiscretization(DuneDiscretizationBase, StationaryDiscretization):
         current_solution = [v[0].impl for v in current_solution]
         current_solution = neighborhood_space.project_onto_neighborhood(current_solution, neighborhood)
         current_solution = make_discrete_function(neighborhood_space, current_solution)
+
         # Solve the local corrector problem.
         #   LHS
         ops = []
@@ -274,11 +276,29 @@ class DuneDiscretization(DuneDiscretizationBase, StationaryDiscretization):
         neighborhood_assembler.assemble()
         # solve
         local_space_id = self.solution_space.subspaces[subdomain].id
-        lhs = LincombOperator([DuneXTMatrixOperator(o.matrix(), source_id=local_space_id, range_id=local_space_id)
-                               for o in ops],
-                              ops_coeffs)
-        rhs = LincombOperator([VectorFunctional(lhs.range.make_array([v.vector()])) for v in funcs], funcs_coeffs)
-        correction = lhs.apply_inverse(rhs.as_source_array(mu), mu=mu, inverse_options=inverse_options)
+        # lhs = LincombOperator([DuneXTMatrixOperator(o.matrix(), source_id=local_space_id, range_id=local_space_id)
+        #                        for o in ops],
+        #                       ops_coeffs)
+
+        cols, rows = ops[0].matrix().cols, ops[0].matrix().rows
+        assert cols == rows
+
+        simple = False
+
+        if simple:
+            from scipy.sparse import coo_matrix
+            eye = coo_matrix(np.eye(rows, cols))
+            lhs = NumpyMatrixOperator(eye, source_id=local_space_id, range_id=local_space_id)
+            rhs = VectorFunctional(lhs.range.make_array(np.ones(rows)))
+            correction = lhs.apply_inverse(rhs.as_source_array(mu), mu=mu, inverse_options=None)
+            localized_corrections_as_np = correction
+        else:
+            lhs = LincombOperator([DuneXTMatrixOperator(o.matrix(), source_id=local_space_id, range_id=local_space_id)
+                                            for o in ops],ops_coeffs)
+            rhs = LincombOperator([VectorFunctional(lhs.range.make_array([v.vector()])) for v in funcs], funcs_coeffs)
+            correction = lhs.apply_inverse(rhs.as_source_array(mu), mu=mu, inverse_options=inverse_options)
+            # correction = rhs.as_source_array(mu)
+
         assert len(correction) == 1
         # restrict to subdomain
         local_sizes = [block_space.local_space(nn).size() for nn in neighborhood]
@@ -379,6 +399,7 @@ def discretize_lhs(lambda_func, grid, block_space, local_patterns, boundary_patt
     for ii in range(num_global_subdomains):
         ss = block_space.local_space(ii)
         ll = local_matrices[ii]
+        # the operator itself is never used again, but the matrices it assembled are
         ipdg_operator = make_elliptic_swipdg_matrix_operator(lambda_func, kappa, local_all_neumann_boundary_info,
                                                              ll,
                                                              ss, over_integrate=2)
@@ -618,6 +639,7 @@ def discretize(grid_and_problem_data, solver_options, mpi_comm):
     for ii in range(num_global_subdomains):
 
         neighborhood = grid.neighborhood_of(ii)
+        logger.error('NEIGH {}: {}'.format(ii, neighborhood))
 
         ################ Assemble local inner products
 
@@ -753,6 +775,7 @@ def discretize(grid_and_problem_data, solver_options, mpi_comm):
     # instantiate error estimator
     min_diffusion_evs = np.array([min_diffusion_eigenvalue(grid, ii, lambda_hat, kappa) for ii in
                                   range(num_global_subdomains)])
+
     subdomain_diameters = np.array([subdomain_diameter(grid, ii) for ii in range(num_global_subdomains)])
     if len(f_funcs) == 1:
         assert f_coeffs[0] == 1
@@ -762,7 +785,8 @@ def discretize(grid_and_problem_data, solver_options, mpi_comm):
         local_eta_rf_squared = None
     estimator = EllipticEstimator(grid, min_diffusion_evs, subdomain_diameters, local_eta_rf_squared, lambda_coeffs,
                                   mu_bar, mu_hat, fr_op, oswald_interpolation_error=oi_op,
-                                  mpi_comm = mpi_comm)
+                                  global_dg_space=block_space,
+                                  mpi_comm = mpi_comm, global_rt_space=global_rt_space)
     l2_product = BlockDiagonalOperator(local_l2_products)
 
     # instantiate discretization
